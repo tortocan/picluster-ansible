@@ -1,32 +1,32 @@
 ---
 all:
   hosts:
-    whitepi:
-      ansible_host: whitepi.local
-    greenpi:
-      ansible_host: greenpi.local
-    redpi:
-      ansible_host: redpi.local
-    bluepi:
-      ansible_host: bluepi.local
+    c1-manager1:
+      ansible_host: c1-manager1.lan
+    c1-master1:
+      ansible_host: c1-master1.lan
+    c1-node1:
+      ansible_host: c1-node1.lan
+    c1-node2:
+      ansible_host: c1-node2.lan
   children:
     raspberry_pi:
       hosts:
-        whitepi: {}
-        greenpi: {}
-        redpi: {}
-        bluepi: {}
+        c1-manager1: {}
+        c1-master1: {}
+        c1-node1: {}
+        c1-node2: {}
     k3s_coordinator:
       hosts:
-        whitepi: {}
+        c1-manager1: {}
     k3s_worker:
       hosts:
-        greenpi: {}
-        redpi: {}
-        bluepi: {}
+        c1-master1: {}
+        c1-node1: {}
+        c1-node2: {}
     monitoring_server:
       hosts:
-        whitepi: {}
+        c1-manager1: {}
   vars:
     ansible_python_interpreter: /usr/bin/python3
     remote_user: pi
