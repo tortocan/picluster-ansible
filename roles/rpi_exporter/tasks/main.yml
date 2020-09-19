@@ -6,6 +6,7 @@
   user:
     name: "{{userId}}"
     group: "{{groupId}}"
+    sudo: yes
     system: yes
     shell: "/sbin/nologin"
     comment: "{{userId}} nologin User"

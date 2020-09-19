@@ -2,7 +2,8 @@
 all:
   hosts:
     c1-manager1:
-      ansible_host: c1-manager1.lan
+      ansible_host: c1-manager1
+      ansible_user: pi
     c1-master1:
       ansible_host: c1-master1.lan
     c1-node1:
@@ -29,4 +30,4 @@ all:
         c1-manager1: {}
   vars:
     ansible_python_interpreter: /usr/bin/python3
-    remote_user: pi
+    remote_user: ubuntu

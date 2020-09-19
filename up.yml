@@ -1,6 +1,6 @@
 ---
 - hosts: raspberry_pi
-  user: pi
+  user: ubuntu
   roles:
     - common
     - rpi_exporter
