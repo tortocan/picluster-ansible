@@ -1,0 +1,70 @@
+---
+  # - name: Remove previous version of docker and docker engine
+  #   apt:
+  #     name: "{{ packages }}"
+  #     state: absent
+  #     update_cache: yes
+  #   vars:
+  #     packages:
+  #        - docker
+  #        - docker.io
+  #        - docker-engine
+  #        - containerd
+  #        - runc
+
+  - name: Add an apt signing key for Docker
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+
+  - name: Add apt repository for stable version
+    apt_repository:
+      update_cache: yes
+      repo: deb [arch=arm64] https://download.docker.com/linux/ubuntu focal stable
+      state: present
+
+  - name: Install docker and its dependecies
+    apt:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+
+    notify:
+      - docker info
+
+  - name: Remove swapfile from /etc/fstab
+    mount:
+      name: "{{ item }}"
+      fstype: swap
+      state: absent
+    with_items:
+      - swap
+      - none
+
+  - name: Disable swap
+    command: swapoff -a
+    when: ansible_swaptotal_mb > 0
+
+  - name: Configure Docker daemon options (json)
+    template:
+      src: "etc/docker/daemon.json.j2"
+      dest: "/etc/docker/daemon.json"
+      owner: "root"
+      group: "root"
+      mode: "0644"
+    when: docker__default_daemon_json | d() or docker__daemon_json | d()
+    notify:
+      - "Restart Docker"
+      - systemd_reload
+
+  - name: Add user(s) to "docker" group
+    user:
+      name: "{{ item }}"
+      groups: "docker"
+      append: true
+    loop: "{{ docker__users }}"

@@ -1,8 +1,8 @@
-
 ---
-- hosts: all 
-  user: pi
+- hosts: all
+  user: ubuntu
   become: yes
   become_user: root
+  become_method: sudo
   tasks:
     - reboot:

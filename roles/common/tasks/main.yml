@@ -2,47 +2,94 @@
 - name: 'Update and upgrade apt packages'
   become: yes
   apt:
-    upgrade: yes
+    upgrade: 'yes'
     update_cache: yes
     cache_valid_time: 86400
+
+- name: Install packages that allow apt to be used over HTTPS
+  apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+  vars:
+    packages:
+    - apt-transport-https
+    - ca-certificates
+    - curl
+    - gnupg-agent
+    - software-properties-common
+
 - name: 'Install packages'
   become: yes
   apt:
     pkg:
       - python3-pip
+      - python2
+      - aptitude
       - git
-      - vim
-      - zsh
-      - tmux
-- pip:
-    name: glances
-    executable: pip3
-- name: 'clone oh-my-zsh for users'
-  tags:
-    # Suppress warning: [ANSIBLE0006] git used in place of git module
-    # Git module doesn't allow us to set `core.autocrlf=input`.
-    - skip_ansible_lint
-  # core.autocrlf=input prevents https://github.com/robbyrussell/oh-my-zsh/issues/4402
-  command: 'git clone -c core.autocrlf=input --depth=1 https://github.com/robbyrussell/oh-my-zsh.git .oh-my-zsh'
-  args:
-    chdir: '~{{ ansible_user_id }}'
-    creates: '~{{ ansible_user_id }}/.oh-my-zsh'
-- name: 'set permissions of oh-my-zsh for users'
-  file:
-    path: '~{{ ansible_user_id }}/.oh-my-zsh'
-    # Prevent the cloned repository from having insecure permissions. Failing to do
-    # so causes compinit() calls to fail with "command not found: compdef" errors
-    # for users with insecure umasks (e.g., "002", allowing group writability).
-    mode: 'go-w'
-    recurse: yes
-- name: 'set default shell for users'
-  become: yes
-  user:
-    name: pi
-    shell: /bin/zsh
-- name: 'write .zshrc for users'
-  template:
-    src: zshrc.j2
-    dest: '~{{ ansible_user_id }}/.zshrc'
-    backup: yes
-    mode: 'u=rw,go=r'
+      - bash-completion
+
+- name: "Searching for a cgroup_enable_cpuset"
+  lineinfile:
+    path: /boot/firmware/cmdline.txt
+    line: "cgroup_enable=cpuset"
+    regex: "cgroup_enable=cpuset"
+    state: present
+  check_mode: yes
+  register: cgroup_enable_cpuset
+
+- name: 'Enable cgroup_enable=cpuset'
+  command: sed -i '1s/$/ cgroup_enable=cpuset/' /boot/firmware/cmdline.txt
+  when: cgroup_enable_cpuset.msg == "line added"
+  register: _boot_config
+
+- name: "Searching for a cgroup_enable_memory"
+  lineinfile:
+    path: /boot/firmware/cmdline.txt
+    line: "cgroup_enable=memory"
+    regex: "cgroup_enable=memory"
+    state: present
+  check_mode: yes
+  register: cgroup_enable_memory
+
+- name: 'Enable cgroup_enable=memory'
+  command: sed -i '1s/$/ cgroup_enable=memory/' /boot/firmware/cmdline.txt
+  when: cgroup_enable_memory.msg == "line added"
+  register: _boot_config
+
+
+- name: "Searching for a cgroup_memory"
+  lineinfile:
+    path: /boot/firmware/cmdline.txt
+    line: "cgroup_memory=1"
+    regex: "cgroup_memory=1"
+    state: present
+  check_mode: yes
+  register: cgroup_memory
+
+- name: 'Enable cgroup_memory=1'
+  command: sed -i '1s/$/ cgroup_memory=1/' /boot/firmware/cmdline.txt
+  when: cgroup_memory.msg == "line added"
+  register: _boot_config
+
+
+- name: "Searching for a swapaccount=1"
+  lineinfile:
+    path: /boot/firmware/cmdline.txt
+    line: "swapaccount=1"
+    regex: "swapaccount=1"
+    state: present
+  check_mode: yes
+  register: swapaccount
+
+
+- name: 'Enable swapaccount=1'
+  command: sed -i '1s/$/ swapaccount=1/' /boot/firmware/cmdline.txt
+  when: swapaccount.msg == "line added"
+  register: _boot_config
+
+- name: "restart machine"  # noqa 503
+  reboot:
+    msg: "Reboot by Ansible, because /boot/config.txt config changed."
+    reboot_timeout: 300   # (= 5 minutes)
+  when: _boot_config.changed

@@ -1,7 +1,15 @@
-
 ---
-- hosts: all 
-  user: pi
+- hosts: ubuntu_os
+  user: ubuntu
+  become: yes
+  become_user: root
+  tasks:
+    - name: shutdown hosts
+      command: /sbin/shutdown -h now
+      ignore_errors: 'yes'
+
+- hosts: monitoring_server
+  user: ubuntu
   become: yes
   become_user: root
   tasks:

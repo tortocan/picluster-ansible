@@ -6,7 +6,6 @@
   user:
     name: "{{userId}}"
     group: "{{groupId}}"
-    sudo: yes
     system: yes
     shell: "/sbin/nologin"
     comment: "{{userId}} nologin User"
@@ -44,7 +43,7 @@
 - name: Start RPi Exporter service
   become: yes
   service:
-    name: rpi_exporter 
+    name: rpi_exporter
     state: started
     enabled: yes
 

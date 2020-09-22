@@ -51,7 +51,7 @@
   become: yes
   become_user: root
   become_method: sudo
-  file: 
+  file:
     path: "/data/prometheus/"
     state: directory
     owner: "{{userId}}"
@@ -62,7 +62,7 @@
   become: yes
   become_user: root
   become_method: sudo
-  file: 
+  file:
     path: "/etc/prometheus/"
     state: directory
     owner: "{{userId}}"
@@ -104,12 +104,12 @@
 
 - name: 'Download Grafana'
   get_url:
-    url: 'https://dl.grafana.com/oss/release/grafana_{{ grafanaVersion }}_armhf.deb'
+    url: 'https://dl.grafana.com/oss/release/grafana_{{ grafanaVersion }}_arm64.deb'
     dest: /tmp/
 
 - name: 'Install Grafana'
   apt:
-    deb: '/tmp/grafana_{{ grafanaVersion }}_armhf.deb'
+    deb: '/tmp/grafana_{{ grafanaVersion }}_arm64.deb'
 
 - name: Start Grafana service
   become: yes

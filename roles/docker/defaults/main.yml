@@ -1,0 +1,9 @@
+docker__default_daemon_json: |
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "100m" },
+  "storage-driver": "overlay2"
+
+docker__daemon_json: ""
+
+docker__users: ["{{ ansible_env.SUDO_USER | d('root') }}", "ubuntu"]

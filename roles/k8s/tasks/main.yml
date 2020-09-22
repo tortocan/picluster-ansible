@@ -1,0 +1,44 @@
+- name: Add an apt signing key for Kubernetes
+  apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    state: present
+
+- name: Adding apt repository for Kubernetes
+  apt_repository:
+    update_cache: yes
+    repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+    state: present
+    filename: kubernetes.list
+
+- name: Fix net.bridge.bridge-nf-call-iptables issue
+  become: yes
+  sysctl:
+    name: net.bridge.bridge-nf-call-iptables
+    value: 1
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Install Kubernetes binaries
+  apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+  vars:
+    packages:
+      - kubelet
+      - kubeadm
+      - kubectl
+
+
+# - name: Configure node ip
+#   lineinfile:
+#     path: /etc/default/kubelet
+#     line: KUBELET_EXTRA_ARGS=--node-ip={{ node_ip }}
+#     state: present
+
+# - name: Restart kubelet
+#   service:
+#     name: kubelet
+#     daemon_reload: yes
+#     state: restarted

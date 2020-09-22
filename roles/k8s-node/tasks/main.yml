@@ -1,0 +1,11 @@
+- name: Copy the join command to server location
+  ignore_errors: yes
+  become: yes
+  copy: src=~/join-command dest=~/join-command.sh mode=0777
+
+- name: Join the node to cluster
+  become: yes
+  command: sh ~/join-command.sh
+  register: join_result
+  ignore_errors: yes
+  failed_when: '"already exists in the cluster" not in join_result.stderr'

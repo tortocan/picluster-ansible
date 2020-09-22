@@ -1,7 +1,7 @@
 ---
 - name: Playbook for managing the updates in RPi
-  hosts: all 
-  user: pi
+  hosts: all
+  user: ubuntu
   tasks:
     - name: 'Update apt package cache'
       become: yes

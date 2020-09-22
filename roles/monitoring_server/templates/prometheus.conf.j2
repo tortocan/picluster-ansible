@@ -28,7 +28,7 @@ scrape_configs:
     static_configs:
     - targets: ['localhost:9090']
 
-{% for host in groups['raspberry_pi'] %}
+{% for host in groups['ubuntu_os'] %}
 {% set ip_address = hostvars[host]['ansible_facts']['eth0']['ipv4']['address'] %}
 
   - job_name: '{{ host }}'
@@ -42,4 +42,3 @@ scrape_configs:
       - '{{ ip_address }}:9100'
 
 {% endfor %}
-

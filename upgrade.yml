@@ -1,7 +1,7 @@
 ---
 - name: Playbook for upgrading the RPis
-  hosts: raspberry_pi
-  user: pi
+  hosts: ubuntu_os
+  user: ubuntu
   gather_facts: no
   tasks:
     - name: Update and upgrade apt packages

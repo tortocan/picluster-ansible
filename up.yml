@@ -1,12 +1,31 @@
 ---
-- hosts: raspberry_pi
+- hosts: ubuntu_os
+  # strategy: debug
+  # gather_facts: yes
   user: ubuntu
+  become: yes
+  become_user: root
+  become_method: sudo
   roles:
     - common
     - rpi_exporter
     - node_exporter
+    - docker
+    - k8s
 
-- hosts: monitoring_server 
-  user: pi
+- hosts: monitoring_server
+  user: ubuntu
+  become: yes
+  become_user: root
+  become_method: sudo
   roles:
-    - monitoring_server 
+    - monitoring_server
+    - k8s-master
+
+- hosts: k3s_worker
+  user: ubuntu
+  become: yes
+  become_user: root
+  become_method: sudo
+  roles:
+    - k8s-node

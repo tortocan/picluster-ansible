@@ -1,6 +1,6 @@
 ---
-- hosts: k3s_worker 
-  user: pi
+- hosts: k3s_worker
+  user: ubuntu
   become: yes
   become_user: root
   tasks:
