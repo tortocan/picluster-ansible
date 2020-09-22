@@ -1,0 +1,16 @@
+
+- name: Kubectl bash completion
+  become: yes
+  become_user: root
+  shell: kubectl completion bash > /etc/bash_completion.d/kubectl
+
+- name: Kubectl alias complete
+  become: false
+  lineinfile:
+      path: ~/.bashrc
+      line: "{{item}}"
+      regex: "{{item}}"
+      state: present
+  with_items:
+  - alias k=kubectl
+  - complete -F __start_kubectl k

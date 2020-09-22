@@ -8,10 +8,17 @@
   command: "kubeadm init --apiserver-advertise-address='{{ node_ip }}' --apiserver-cert-extra-sans='{{ node_ip }}' --node-name {{ ansible_host }} --pod-network-cidr=192.168.0.0/16"
   when: not kube.stat.exists
 
-- name: Setup kubeconfig for {{remote_user}}
+- name: Create directory kubeconfig for {{remote_user}}
   command: "{{ item }}"
+  become: false
   with_items:
     - mkdir -p /home/{{remote_user}}/.kube
+  when: not kube.stat.exists
+
+- name: Setup kubeconfig for {{remote_user}}
+  command: "{{ item }}"
+  become: yes
+  with_items:
     - cp -i /etc/kubernetes/admin.conf /home/{{remote_user}}/.kube/config
     - chown {{remote_user}}:{{remote_user}} /home/{{remote_user}}/.kube/config
   when: not kube.stat.exists

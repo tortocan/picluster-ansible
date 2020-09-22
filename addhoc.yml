@@ -1,7 +1,7 @@
-- hosts: c1-node1
+- hosts: c1-manager1
   user: ubuntu
   become: yes
   become_user: root
   become_method: sudo
   roles:
-    - k8s-node
+    - adhoc

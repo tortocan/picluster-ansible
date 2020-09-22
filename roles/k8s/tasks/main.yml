@@ -31,6 +31,27 @@
       - kubectl
 
 
+- name: Kubectl bash completion
+  become: yes
+  become_user: root
+  shell: kubectl completion bash > /etc/bash_completion.d/kubectl
+
+- name: Kubectl alias
+  become: false
+  lineinfile:
+      path: ~/.bashrc
+      line: "alias k=kubectl"
+      regex: "alias k=kubectl"
+      state: present
+
+- name: Kubectl alias complete
+  become: false
+  lineinfile:
+      path: ~/.bashrc
+      line: "complete -F __start_kubectl k"
+      regex: "complete -F __start_kubectl k"
+      state: present
+
 # - name: Configure node ip
 #   lineinfile:
 #     path: /etc/default/kubelet
