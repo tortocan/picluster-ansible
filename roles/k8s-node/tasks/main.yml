@@ -1,7 +1,8 @@
 - name: Generate join command
-  delegate_to: c1-manager1.lan
+  delegate_to:  "{{ item }}"
   command: kubeadm token create --print-join-command
   register: join_command
+  loop: "{{ groups['k8s_coordinator'] }}"
 
 - name: Copy join command to local file
   local_action: copy content="kubeadm reset --force \n {{ join_command.stdout_lines[0] }}" dest="~/join-command"

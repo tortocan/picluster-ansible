@@ -1,5 +1,5 @@
 ---
-- hosts: k3s_worker
+- hosts: k8s_worker
   user: ubuntu
   become: yes
   become_user: root

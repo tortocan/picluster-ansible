@@ -10,8 +10,6 @@
     - common
     - rpi_exporter
     - node_exporter
-    - docker
-    - k8s
 
 - hosts: monitoring_server
   user: ubuntu
@@ -20,12 +18,23 @@
   become_method: sudo
   roles:
     - monitoring_server
-    - k8s-master
 
-- hosts: k3s_worker
+- hosts: k8s_coordinator
   user: ubuntu
   become: yes
   become_user: root
   become_method: sudo
   roles:
+    - docker
+    - k8s
+    - k8s-master
+
+- hosts: k8s_worker
+  user: ubuntu
+  become: yes
+  become_user: root
+  become_method: sudo
+  roles:
+    - docker
+    - k8s
     - k8s-node
