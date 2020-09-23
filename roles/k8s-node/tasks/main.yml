@@ -1,3 +1,13 @@
+- name: Generate join command
+  delegate_to: c1-manager1.lan
+  command: kubeadm token create --print-join-command
+  register: join_command
+
+- name: Copy join command to local file
+  local_action: copy content="kubeadm reset --force \n {{ join_command.stdout_lines[0] }}" dest="~/join-command"
+  ignore_errors: 'yes'
+  become: false
+
 - name: Copy the join command to server location
   ignore_errors: yes
   become: yes

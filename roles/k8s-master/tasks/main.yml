@@ -27,11 +27,18 @@
   become: false
   command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
 
-- name: Generate join command
-  command: kubeadm token create --print-join-command
-  register: join_command
+- name: Kubectl bash completion
+  become: yes
+  become_user: root
+  shell: kubectl completion bash > /etc/bash_completion.d/kubectl
 
-- name: Copy join command to local file
-  local_action: copy content="kubeadm reset --force \n {{ join_command.stdout_lines[0] }}" dest="~/join-command"
-  ignore_errors: 'yes'
+- name: Kubectl alias complete
   become: false
+  lineinfile:
+      path: ~/.bashrc
+      line: "{{item}}"
+      regex: "{{item}}"
+      state: present
+  with_items:
+  - alias k=kubectl
+  - complete -F __start_kubectl k

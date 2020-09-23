@@ -34,9 +34,6 @@
       - docker-ce-cli
       - containerd.io
 
-    notify:
-      - docker info
-
   - name: Remove swapfile from /etc/fstab
     mount:
       name: "{{ item }}"
