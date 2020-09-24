@@ -1,16 +1,14 @@
 - name: Generate join command
   delegate_to:  "{{ item }}"
   command: kubeadm token create --print-join-command
-  register: join_command
   loop: "{{ groups['k8s_coordinator'] }}"
+  register: join_command
 
 - name: Copy join command to local file
-  local_action: copy content="kubeadm reset --force \n {{ join_command.stdout_lines[0] }}" dest="~/join-command"
-  ignore_errors: 'yes'
+  local_action: copy content="kubeadm reset --force \n {{ join_command.results[0].stdout_lines[0] }}" dest="~/join-command"
   become: false
 
 - name: Copy the join command to server location
-  ignore_errors: yes
   become: yes
   copy: src=~/join-command dest=~/join-command.sh mode=0777
 
@@ -18,5 +16,4 @@
   become: yes
   command: sh ~/join-command.sh
   register: join_result
-  ignore_errors: yes
   failed_when: '"already exists in the cluster" not in join_result.stderr'

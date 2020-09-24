@@ -18,6 +18,9 @@
     sysctl_set: yes
     state: present
     reload: yes
+  with_items:
+  - net.bridge.bridge-nf-call-iptables
+  - net.bridge.bridge-nf-call-ip6tables
 
 - name: Install Kubernetes binaries
   apt:
