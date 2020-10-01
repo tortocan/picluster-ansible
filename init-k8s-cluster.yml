@@ -1,0 +1,10 @@
+- hosts: k8s_master
+  user: ubuntu
+  gather_facts: no
+  roles:
+    - helm
+    - pihole
+  environment:
+    # The location of the kubeconfig file on the master.
+    K8S_AUTH_KUBECONFIG: ~/.kube/config
+    PATH: "~/go/bin:{{ ansible_env.PATH }}"

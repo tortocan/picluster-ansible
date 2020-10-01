@@ -24,10 +24,12 @@
   apt:
     pkg:
       - python3-pip
-      - python2
+      - python3-setuptools
       - aptitude
+      - golang
       - git
       - bash-completion
+      - nfs-common
 
 - name: "Searching for a cgroup_enable_cpuset"
   lineinfile:

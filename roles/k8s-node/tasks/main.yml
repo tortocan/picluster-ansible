@@ -1,19 +1,53 @@
-- name: Generate join command
-  delegate_to:  "{{ item }}"
-  command: kubeadm token create --print-join-command
-  loop: "{{ groups['k8s_coordinator'] }}"
-  register: join_command
 
-- name: Copy join command to local file
-  local_action: copy content="kubeadm reset --force \n {{ join_command.results[0].stdout_lines[0] }}" dest="~/join-command"
-  become: false
+# - name: Delete nodes
+#   delegate_to: "{{ groups['k8s_master'][0] }}"
+#   run_once: true
+#   become: false
+#   command:  kubectl delete node --selector='!node-role.kubernetes.io/master'
+#   register: leave_command
 
-- name: Copy the join command to server location
+# - name: Generate join command
+#   delegate_to: "{{ item }}"
+#   become: false
+#   command: kubeadm token create --print-join-command
+#   loop: "{{ groups['k8s_master'] }}"
+#   register: join_command
+
+# - name: Copy join command to local file
+#   local_action: copy content="kubeadm reset --force \n {{ join_command.results[0].stdout_lines[0] }}" dest="~/join-command"
+#   become: false
+
+# - name: Copy the join command to server location
+#   become: yes
+#   copy: src=~/join-command dest=~/join-command.sh mode=0777
+
+# - name: Join the node to cluster
+#   become: yes
+#   command: sh ~/join-command.sh
+#   register: join_result
+#   failed_when: ' "This node has joined the cluster:" not in join_result.stdout_lines and "already exists in the cluster" not in join_result.stderr'
+
+# - name: Create local storage directory if it does not exist
+#   file:
+#     path: /mnt/disk/vol1
+#     state: directory
+#     mode: '0777'
+
+- name: Create fake block devices
   become: yes
-  copy: src=~/join-command dest=~/join-command.sh mode=0777
+  command: "{{ item }}"
+  loop:
+    - dd if=/dev/zero of=/home/gluster/image bs=1M count=10000
+    - losetup /dev/loop6 /home/gluster/image
+    - modprobe dm_thin_pool
+    - apt-get update && apt-get -y install glusterfs-client
 
-- name: Join the node to cluster
-  become: yes
-  command: sh ~/join-command.sh
-  register: join_result
-  failed_when: '"already exists in the cluster" not in join_result.stderr'
+
+- name: 'Install glusterfs'
+  apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+  vars:
+    packages:
+      - glusterfs-client

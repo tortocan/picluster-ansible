@@ -1,0 +1,101 @@
+---
+
+- name: Ensure openshift Python library is installed.
+  pip:
+    name: openshift
+    state: present
+  become: true
+
+- name: Create pihole namespace.
+  k8s:
+    name: pihole
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Create pihole StorageClass.
+  k8s:
+    state: present
+    definition:
+      api_version: v1
+      kind: StorageClass
+      metadata:
+        namespace:
+        name: local
+      provisioner: kubernetes.io/no-provisioner
+      volumeBindingMode: WaitForFirstConsumer
+
+- name: Create pihole PersistentVolume.
+  k8s:
+    state: present
+    definition:
+      api_version: v1
+      kind: PersistentVolume
+      metadata:
+        namespace:
+        name: pihole
+        labels:
+          directory: etc
+      spec:
+        capacity:
+          storage: 1Gi
+        accessModes:
+        - ReadWriteOnce
+        persistentVolumeReclaimPolicy: Delete
+        storageClassName: local
+        local:
+          path: /mnt/disk/vol1
+        nodeAffinity:
+          required:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - c1-node1
+                - c1-node2
+                - c1-node3
+
+
+- name: Add mojo2600 chart repo.
+  helm_repository:
+    name: mojo2600
+    repo_url: "https://mojo2600.github.io/pihole-kubernetes/"
+
+- name: Deploy pihole Helm chart.
+  helm:
+    name: pihole
+    chart_ref: mojo2600/pihole
+    chart_version: '1.7.17'
+    release_namespace: pihole
+    state: present
+    values:
+      persistentVolumeClaim:
+        enabled: true
+        storageClass: local
+      ingress:
+        enabled: true
+      serviceTCP:
+        annotations:
+          metallb.universe.tf/allow-shared-ip: pihole-svc
+        loadBalancerIP: '{{ load_balancer_server_ip_tcp }}'
+        type: LoadBalancer
+      serviceUDP:
+        annotations:
+          metallb.universe.tf/allow-shared-ip: pihole-svc
+        loadBalancerIP: '{{ load_balancer_server_ip_udp }}'
+        type: LoadBalancer
+      resources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+      # If using in the real world, set up admin.existingSecret instead.
+      adminPassword: admin
+      replicaCount: 1
+      #hostNetwork: true
+      #securityContext.privileged: true
+      # DNS1: "{{ load_balancer_server_ip_tcp }}"
+      # DNS2: "{{ load_balancer_server_ip_udp }}"

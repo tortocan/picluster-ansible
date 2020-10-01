@@ -1,16 +1,8 @@
 
-- name: Kubectl bash completion
-  become: yes
-  become_user: root
-  shell: kubectl completion bash > /etc/bash_completion.d/kubectl
 
-- name: Kubectl alias complete
-  become: false
-  lineinfile:
-      path: ~/.bashrc
-      line: "{{item}}"
-      regex: "{{item}}"
-      state: present
-  with_items:
-  - alias k=kubectl
-  - complete -F __start_kubectl k
+- name: Create fake block devices
+  become: yes
+  command: "{{ item }}"
+  loop:
+    - dd if=/dev/zero of=/home/gluster/image bs=1M count=10000
+    - losetup /dev/loop{{ disk }} /home/gluster/image

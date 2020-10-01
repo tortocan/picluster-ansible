@@ -2,39 +2,35 @@
 all:
   hosts:
     c1-master1:
-      ansible_host: c1-master1.lan
-      node_ip: 192.168.0.21
-      node_mac: dc:a6:32:32:46:31
-    c1-node1:
-      ansible_host: c1-node1.lan
-      node_ip: 192.168.0.31
-      node_mac: dc:a6:32:32:45:e1
-    c1-node2:
-      ansible_host: c1-node2.lan
-      node_ip: 192.168.0.41
-      node_mac: dc:a6:32:32:2e:ce
-    c1-manager1:
-      ansible_host: c1-manager1.lan
-      node_ip: 192.168.0.11
+      ansible_host: 192.168.0.11
       node_mac: dc:a6:32:32:2e:cf
+    c1-node1:
+      ansible_host: 192.168.0.21
+      node_mac: dc:a6:32:32:46:31
+      disk: 0
+    c1-node2:
+      ansible_host: 192.168.0.31
+      node_mac: dc:a6:32:32:2e:ce
+      disk: 1
+    c1-node3:
+      ansible_host: 192.168.0.41
+      node_mac: dc:a6:32:32:45:e1
+      disk: 2
   children:
     ubuntu_os:
       hosts:
-        c1-master1: {}
         c1-node1: {}
+        c1-node3: {}
         c1-node2: {}
-        c1-manager1: {}
-    k8s_coordinator:
+        c1-master1: {}
+    k8s_master:
       hosts:
-        c1-manager1: {}
+        c1-master1: {}
     k8s_worker:
       hosts:
-        c1-master1: {}
         c1-node1: {}
+        c1-node3: {}
         c1-node2: {}
-    monitoring_server:
-      hosts:
-        c1-manager1: {}
   vars:
     ansible_python_interpreter: /usr/bin/python3
     remote_user: ubuntu

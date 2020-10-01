@@ -5,7 +5,7 @@
 
 - name: Initialize the Kubernetes cluster using kubeadm
   run_once: 'yes'
-  command: "kubeadm init --apiserver-advertise-address='{{ node_ip }}' --apiserver-cert-extra-sans='{{ node_ip }}' --node-name {{ ansible_host }} --pod-network-cidr=192.168.0.0/16"
+  command: "kubeadm init --apiserver-advertise-address='{{ ansible_host }}' --apiserver-cert-extra-sans='{{ ansible_host }}' --node-name {{ ansible_host }} --pod-network-cidr=192.168.0.0/16"
   when: not kube.stat.exists
 
 - name: Create directory kubeconfig for {{remote_user}}
@@ -26,11 +26,26 @@
 - name: Install calico pod network
   become: false
   command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+  when: not kube.stat.exists
+
+- name: Create metal lb secret
+  become: false
+  command: kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"
+  when: not kube.stat.exists
+
+- name: Install metal lb
+  become: false
+  command: "{{ item }}"
+  with_items:
+    - kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/namespace.yaml
+    - kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/metallb.yaml
+  when: not kube.stat.exists
 
 - name: Kubectl bash completion
   become: yes
   become_user: root
   shell: kubectl completion bash > /etc/bash_completion.d/kubectl
+  when: not kube.stat.exists
 
 - name: Kubectl alias complete
   become: false
@@ -42,3 +57,4 @@
   with_items:
   - alias k=kubectl
   - complete -F __start_kubectl k
+  when: not kube.stat.exists

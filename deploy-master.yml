@@ -1,0 +1,9 @@
+- hosts: k8s_master
+  user: ubuntu
+  become: yes
+  become_user: root
+  become_method: sudo
+  roles:
+    - docker
+    - k8s
+    - k8s-master
