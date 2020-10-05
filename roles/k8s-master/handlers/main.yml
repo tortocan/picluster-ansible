@@ -1,0 +1,14 @@
+- name: restart kubelet
+  command: /bin/true
+  notify:
+    - Kubelet | reload kubelet
+    - Kubelet | reload systemd
+    
+- name: Kubelet | reload systemd
+  systemd:
+    daemon_reload: true
+
+- name: Kubelet | reload kubelet
+  service:
+    name: kubelet
+    state: restarted

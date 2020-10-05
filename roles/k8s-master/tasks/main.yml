@@ -1,3 +1,8 @@
+- name: Ensure openshift Python library is installed.
+  pip:
+    name: openshift
+    state: present
+  become: true
 
 - name: Check if kube confing exists for {{remote_user}}
   stat: path=/home/{{remote_user}}/.kube
@@ -5,7 +10,7 @@
 
 - name: Initialize the Kubernetes cluster using kubeadm
   run_once: 'yes'
-  command: "kubeadm init --apiserver-advertise-address='{{ ansible_host }}' --apiserver-cert-extra-sans='{{ ansible_host }}' --node-name {{ ansible_host }} --pod-network-cidr=192.168.0.0/16"
+  command: "kubeadm init --apiserver-advertise-address='{{ ansible_host }}' --apiserver-cert-extra-sans='{{ ansible_host }}' --node-name {{ inventory_hostname }} --pod-network-cidr=192.168.0.0/16"
   when: not kube.stat.exists
 
 - name: Create directory kubeconfig for {{remote_user}}
@@ -23,10 +28,39 @@
     - chown {{remote_user}}:{{remote_user}} /home/{{remote_user}}/.kube/config
   when: not kube.stat.exists
 
-- name: Install calico pod network
+- name: Restart kubelet
+  command: /bin/true
+  notify: restart kubelet
+
+- name: Wait for k8s to be ready
+  wait_for:
+    host: localhost
+    port: 6443
+    state: started
+    timeout: 60
+
+
+- name: Install pod network
   become: false
   command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
   when: not kube.stat.exists
+
+
+- name: Get dns service address
+  become: false
+  command: kubectl get services --all-namespaces -ojsonpath='{.items[?(@.metadata.name=="kube-dns")].spec.clusterIP}'
+  register: kubednsaddress
+
+- name: Wait for dns to be ready
+  wait_for: host={{ kubednsaddress.stdout }} port=53 state=started timeout=1800
+ 
+- name: Create metal lb namespace.
+  become: false
+  k8s:
+    name: metallb-system
+    api_version: v1
+    kind: Namespace
+    state: present
 
 - name: Create metal lb secret
   become: false

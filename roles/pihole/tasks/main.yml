@@ -1,12 +1,5 @@
----
-
-- name: Ensure openshift Python library is installed.
-  pip:
-    name: openshift
-    state: present
-  become: true
-
 - name: Create pihole namespace.
+  become: false
   k8s:
     name: pihole
     api_version: v1
@@ -14,6 +7,7 @@
     state: present
 
 - name: Create pihole StorageClass.
+  become: false
   k8s:
     state: present
     definition:
@@ -26,6 +20,7 @@
       volumeBindingMode: WaitForFirstConsumer
 
 - name: Create pihole PersistentVolume.
+  become: false
   k8s:
     state: present
     definition:
@@ -56,13 +51,14 @@
                 - c1-node2
                 - c1-node3
 
-
 - name: Add mojo2600 chart repo.
+  become: false
   helm_repository:
     name: mojo2600
     repo_url: "https://mojo2600.github.io/pihole-kubernetes/"
 
 - name: Deploy pihole Helm chart.
+  become: false
   helm:
     name: pihole
     chart_ref: mojo2600/pihole

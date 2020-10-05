@@ -1,4 +1,3 @@
----
 - name: 'Update and upgrade apt packages'
   become: yes
   apt:
@@ -103,8 +102,14 @@
   - dtoverlay=disable-wifi
   - dtoverlay=disable-bt
 
+
+- name: Set a hostname
+  hostname:
+    name: "{{inventory_hostname}}"
+  register: _hostname_result
+
 - name: "restart machine"  # noqa 503
   reboot:
     msg: "Reboot by Ansible, because config changed."
     reboot_timeout: 300   # (= 5 minutes)
-  when: _boot_config.changed or _user_config.changed
+  when: _boot_config.changed or _user_config.changed or _hostname_result.changed

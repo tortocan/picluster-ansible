@@ -1,12 +1,3 @@
----
-- hosts: localhost
-  # strategy: debug
-  gather_facts: no
-  connection: local
-  user: ubuntu
-  roles:
-    - ssh
-
 - hosts: ubuntu_os
   # strategy: debug
   # gather_facts: yes
@@ -16,8 +7,8 @@
   become_method: sudo
   roles:
     - common
-    - rpi_exporter
-    - node_exporter
+    # - rpi_exporter
+    # - node_exporter
 
 - hosts: k8s_master
   user: ubuntu
@@ -25,10 +16,11 @@
   become_user: root
   become_method: sudo
   roles:
-    - monitoring_server
+    # - monitoring_server
     - docker
     - k8s
     - k8s-master
+    - helm
     # - cluster_monitoring
 
 - hosts: k8s_worker

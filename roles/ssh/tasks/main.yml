@@ -26,8 +26,8 @@
       register: ssh_directory_creation
       when: ssh_directory_exists_check is defined and ssh_directory_exists_check.stat.exists == false
 
-    # - debug:
-    #     var: ssh_directory_creation
+    - debug:
+        var: ssh_directory_creation
 
     - name: check .ssh key file exists
       stat:
@@ -37,8 +37,8 @@
         - "id_rsa"
         - "id_rsa.pub"
 
-    # - debug:
-    #     var: ssh_key_file_exists_check.results[1].stat.exists
+    - debug:
+        var: ssh_key_file_exists_check.results[1].stat.exists
 
     - name: generate ssh key on local machine
       shell: "ssh-keygen -t rsa -f ~/.ssh/id_rsa -P \"\""
@@ -46,8 +46,8 @@
       failed_when: ssh_key_creation.rc != 0
       when: ssh_key_file_exists_check is defined and ssh_key_file_exists_check.results[0].stat.exists == false and ssh_key_file_exists_check.results[1].stat.exists == false
 
-    # - debug:
-    #     var: ssh_key_creation
+    - debug:
+        var: ssh_key_creation
 
     - name: check .ssh/config file exists
       stat:
@@ -76,16 +76,63 @@
     # - debug:
     #     var: ssh_config_file_key_addition
 
-    - name: distribute the ssh key to the remote hosts
+    # - name: Get current ip configuration
+    #   delegate_to: localhost
+    #   shell: "for ((i=1; i<=255; i++));do arp -i en0 192.168.0.$i; done | grep {{ hostvars[item].node_mac }} | awk '{print $2}' | sed -e 's/(//' -e 's/)//'" 
+    #   register: _ip_result
+    #   with_items:
+    #     - "{{ groups['all']}}"
+    #   failed_when: _ip_result.rc != 0
+    # sudo nmap -sP 192.168.0.0/26 | grep -B 2 -E 'DC:A6:32:32:2E:CF|DC:A6:32:32:46:31|DC:A6:32:32:2E:CE|DC:A6:32:32:45:E1' | grep report | cut -d ' ' -f 5
+
+
+    # - name: Get current ip configuration
+    #   delegate_to: localhost
+    #   become: yes
+    #   shell: "nmap -p 22 --open 192.168.0.0/26 | awk -v mac='{{hostvars[item].node_mac}}' '/report for/{ip=$5}$0~mac{print ip}'"
+    #   register: _ip_result
+    #   with_items:
+    #     - "{{ groups['all']}}"
+    #   failed_when: _ip_result.rc != 0
+
+    # - debug:
+    #     var: _ip_result 
+
+    
+    # - debug:
+    #     var: _ip_result | json_query('results[*].stdout')
+     
+    # - name: Distribute the ssh key to the remote hosts
+    #   delegate_to: localhost
+    #   shell: msg="ssh-copy-id -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa.pub {{remote_user}}@{{item}} -f"
+    #   with_items: "{{_ip_result | json_query('results[*].stdout') }}"
+    #   when: item != ""
+    #   register: ssh_copy_id_execution
+    #   failed_when: ssh_copy_id_execution.rc != 0
+
+    # - name: Set a hostname
+    #   hostname:
+    #     name: "{{item.item}}"
+    #   register: _hostname_result
+    #   with_items: "{{_ip_result | json_query('results[*]') }}"
+    #   when: item.stdout != ""
+
+    # - name: Reboot a hostname
+    #   reboot:
+    #     msg: "Reboot by Ansible, because config changed."
+    #     reboot_timeout: 300   # (= 5 minutes)
+    #   when: item.stdout != ""
+    #   with_items: "{{_ip_result | json_query('results[*]') }}"
+
+    - name: Distribute the ssh key to the remote hosts
       delegate_to: localhost
       shell: "ssh-copy-id -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa.pub {{remote_user}}@{{ hostvars[item].ansible_host }} -f"
       register: ssh_copy_id_execution
-      with_items:
-        - "{{ groups['all']}}"
+      loop: "{{ groups['all']}}"
       failed_when: ssh_copy_id_execution.rc != 0
 
-    - debug:
-        var: ssh_copy_id_execution
+    # - debug:
+    #     var: ssh_copy_id_execution
 
     # - name: check ssh to remote hosts works
     #   shell: "hostname; id"

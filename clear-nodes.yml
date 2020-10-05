@@ -1,0 +1,30 @@
+- hosts: k8s_master
+  user: ubuntu
+  tasks:
+    - name: Delete all k8s
+      command: kubectl delete all --all --all-namespaces 
+
+- hosts: all
+  user: ubuntu
+  become: yes
+  become_user: root
+  become_method: sudo
+  tasks:
+    - name: Reset k8s
+      command: kubeadm reset --force
+    - name: Clear ip tables and link
+      command: "{{item}}"
+      loop:
+        - iptables -F
+        - iptables -t nat -F
+        - iptables -t mangle -F
+        - iptables -X
+        - ip link delete cni0
+        
+    - name: Remove k8s files
+      file:
+        path: "{{item}}"
+        state: absent
+      loop:
+        - /etc/cni/net.d/
+        - /home/{{remote_user}}/.kube/
