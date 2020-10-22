@@ -10,7 +10,7 @@
 
 - name: Initialize the Kubernetes cluster using kubeadm
   run_once: 'yes'
-  command: "kubeadm init --apiserver-advertise-address='{{ ansible_host }}' --apiserver-cert-extra-sans='{{ ansible_host }}' --node-name {{ inventory_hostname }} --pod-network-cidr=192.168.0.0/16"
+  command: "kubeadm init --apiserver-advertise-address='{{ ansible_host }}' --apiserver-cert-extra-sans='{{ ansible_host }}' --node-name {{ inventory_hostname }}"
   when: not kube.stat.exists
 
 - name: Create directory kubeconfig for {{remote_user}}
@@ -45,7 +45,6 @@
   command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
   when: not kube.stat.exists
 
-
 - name: Get dns service address
   become: false
   command: kubectl get services --all-namespaces -ojsonpath='{.items[?(@.metadata.name=="kube-dns")].spec.clusterIP}'
@@ -53,14 +52,12 @@
 
 - name: Wait for dns to be ready
   wait_for: host={{ kubednsaddress.stdout }} port=53 state=started timeout=1800
- 
+
 - name: Create metal lb namespace.
   become: false
-  k8s:
-    name: metallb-system
-    api_version: v1
-    kind: Namespace
-    state: present
+  command: "{{ item }}"
+  with_items:
+    - kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/namespace.yaml
 
 - name: Create metal lb secret
   become: false
@@ -71,9 +68,69 @@
   become: false
   command: "{{ item }}"
   with_items:
-    - kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/namespace.yaml
     - kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/metallb.yaml
   when: not kube.stat.exists
+
+- name: Create the metal lb config map
+  become: false
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        namespace: metallb-system
+        name: config
+      data:
+        config: |
+          address-pools:
+          - name: default
+            protocol: layer2
+            addresses:
+            - 192.168.0.240/28
+- name: Create nginx-deployment
+  become: false
+  k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        namespace: default
+        name: nginx-deployment
+      spec:
+        selector:
+          matchLabels:
+            app: nginx
+        replicas: 3
+        template:
+          metadata:
+            labels:
+              app: nginx
+          spec:
+            containers:
+            - name: nginx
+              image: nginx:latest
+              ports:
+              - containerPort: 80
+
+- name: Create nginx-service
+  become: false
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        namespace: default
+        name: nginx
+      spec:
+        type: LoadBalancer
+        selector:
+          app: nginx
+        ports:
+        - port: 80
+          name: http
 
 - name: Kubectl bash completion
   become: yes

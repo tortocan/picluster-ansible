@@ -1,4 +1,4 @@
-- hosts: k8s_worker
+- hosts: c1-node1
   user: ubuntu
   become: yes
   become_user: root

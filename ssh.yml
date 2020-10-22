@@ -5,3 +5,4 @@
   user: ubuntu
   roles:
     - ssh
+- include: ping.yml

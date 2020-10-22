@@ -1,39 +1,43 @@
-
-    # - name: Print some debug information 
-    #   vars: 
-    #     msg: |
-    #       # Module Variables ("vars"):
-    #       # --------------------------------
-    #       # {{ vars | to_nice_json }} 
-          
-    #       # Environment Variables ("environment"):
-    #       # --------------------------------
-    #       # {{ environment | to_nice_json }} 
-          
-    #       # GROUP NAMES Variables ("group_names"):
-    #       # --------------------------------
-    #       # {{ group_names | to_nice_json }}
-          
-    #       # GROUPS Variables ("groups"):
-    #       # --------------------------------
-    #       # {{ groups | to_nice_json }}
-          
-    #       HOST Variables ("hostvars"):
-    #       --------------------------------
-    #       {{ hostvars | to_nice_json }} 
-    
-    #   debug: 
-    #     msg: "{{ msg.split('\n') }}"       
-    #   tags: debug_info
-
-- name: Get dns service address
+- name: Create nginx-deployment
   become: false
-  command: kubectl get services --all-namespaces -ojsonpath='{.items[?(@.metadata.name=="kube-dns")].spec.clusterIP}'
-  register: kubednsaddress
+  k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        namespace: default
+        name: nginx-deployment
+      spec:
+        selector:
+          matchLabels:
+            app: nginx
+        replicas: 3
+        template:
+          metadata:
+            labels:
+              app: nginx
+          spec:
+            containers:
+            - name: nginx
+              image: nginx:latest
+              ports:
+              - containerPort: 80
 
-- name: Wait for dns to be ready
-  wait_for: 
-    host: "{{ kubednsaddress.stdout }}" 
-    port: 53 
-    state: started 
-    timeout: 1800
+- name: Create nginx-service
+  become: false
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        namespace: default
+        name: nginx
+      spec:
+        type: LoadBalancer
+        selector:
+          app: nginx
+        ports:
+        - port: 80
+          name: http

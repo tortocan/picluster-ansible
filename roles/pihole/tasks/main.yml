@@ -1,55 +1,55 @@
-- name: Create pihole namespace.
-  become: false
-  k8s:
-    name: pihole
-    api_version: v1
-    kind: Namespace
-    state: present
+# - name: Create pihole namespace.
+#   become: false
+#   k8s:
+#     name: pihole
+#     api_version: v1
+#     kind: Namespace
+#     state: present
 
-- name: Create pihole StorageClass.
-  become: false
-  k8s:
-    state: present
-    definition:
-      api_version: v1
-      kind: StorageClass
-      metadata:
-        namespace:
-        name: local
-      provisioner: kubernetes.io/no-provisioner
-      volumeBindingMode: WaitForFirstConsumer
+# - name: Create pihole StorageClass.
+#   become: false
+#   k8s:
+#     state: present
+#     definition:
+#       api_version: v1
+#       kind: StorageClass
+#       metadata:
+#         namespace:
+#         name: local
+#       provisioner: kubernetes.io/no-provisioner
+#       volumeBindingMode: WaitForFirstConsumer
 
-- name: Create pihole PersistentVolume.
-  become: false
-  k8s:
-    state: present
-    definition:
-      api_version: v1
-      kind: PersistentVolume
-      metadata:
-        namespace:
-        name: pihole
-        labels:
-          directory: etc
-      spec:
-        capacity:
-          storage: 1Gi
-        accessModes:
-        - ReadWriteOnce
-        persistentVolumeReclaimPolicy: Delete
-        storageClassName: local
-        local:
-          path: /mnt/disk/vol1
-        nodeAffinity:
-          required:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: In
-                values:
-                - c1-node1
-                - c1-node2
-                - c1-node3
+# - name: Create pihole PersistentVolume.
+#   become: false
+#   k8s:
+#     state: present
+#     definition:
+#       api_version: v1
+#       kind: PersistentVolume
+#       metadata:
+#         namespace:
+#         name: pihole
+#         labels:
+#           directory: etc
+#       spec:
+#         capacity:
+#           storage: 1Gi
+#         accessModes:
+#         - ReadWriteOnce
+#         persistentVolumeReclaimPolicy: Delete
+#         storageClassName: local
+#         local:
+#           path: /mnt/disk/vol1
+#         nodeAffinity:
+#           required:
+#             nodeSelectorTerms:
+#             - matchExpressions:
+#               - key: kubernetes.io/hostname
+#                 operator: In
+#                 values:
+#                 - c1-node1
+#                 - c1-node2
+#                 - c1-node3
 
 - name: Add mojo2600 chart repo.
   become: false
@@ -62,15 +62,17 @@
   helm:
     name: pihole
     chart_ref: mojo2600/pihole
-    chart_version: '1.7.17'
+    chart_version: '1.7.19'
     release_namespace: pihole
     state: present
     values:
       persistentVolumeClaim:
         enabled: true
-        storageClass: local
-      ingress:
-        enabled: true
+        storageClass: rook-cephfs
+        accessModes:
+          - ReadWriteMany
+      extraEnvVars:
+        # ServerIP: '{{ load_balancer_server_ip_tcp }}'
       serviceTCP:
         annotations:
           metallb.universe.tf/allow-shared-ip: pihole-svc
@@ -81,17 +83,24 @@
           metallb.universe.tf/allow-shared-ip: pihole-svc
         loadBalancerIP: '{{ load_balancer_server_ip_udp }}'
         type: LoadBalancer
+      probes:
+        liveness:
+          enabled: true
+        readiness:
+          enabled: true
       resources:
         limits:
+          cpu: 400m
+          memory: 512Mi
+        requests:
           cpu: 200m
           memory: 256Mi
-        requests:
-          cpu: 100m
-          memory: 128Mi
       # If using in the real world, set up admin.existingSecret instead.
       adminPassword: admin
-      replicaCount: 1
-      #hostNetwork: true
-      #securityContext.privileged: true
-      # DNS1: "{{ load_balancer_server_ip_tcp }}"
-      # DNS2: "{{ load_balancer_server_ip_udp }}"
+      replicaCount: 3
+      hostNetwork: true
+      privileged: true
+      webHttp: "80"
+      webHttps: "443"
+      DNS1: "1.1.1.1"
+      DNS2: "1.0.0.1"

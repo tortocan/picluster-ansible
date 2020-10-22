@@ -1,30 +1,59 @@
-- hosts: k8s_master
-  user: ubuntu
-  tasks:
-    - name: Delete all k8s
-      command: kubectl delete all --all --all-namespaces 
-
-- hosts: all
+- hosts: k8s_worker
   user: ubuntu
   become: yes
   become_user: root
   become_method: sudo
   tasks:
+
+    - name: Delete node
+      delegate_to: "{{ groups['k8s_master'][0] }}"
+      become: false
+      ignore_errors: yes
+      command:  kubectl delete node {{inventory_hostname}}
+      register: leave_command
+
     - name: Reset k8s
       command: kubeadm reset --force
     - name: Clear ip tables and link
       command: "{{item}}"
+      ignore_errors: yes
       loop:
         - iptables -F
         - iptables -t nat -F
         - iptables -t mangle -F
         - iptables -X
-        - ip link delete cni0
-        
+        - ip link delete $(ip a | grep cali | awk '{print $2}' | cut -d "@" -f 1)
+        - ip link delete tunl0
+        - ip link delete docker0
+
     - name: Remove k8s files
       file:
         path: "{{item}}"
         state: absent
       loop:
         - /etc/cni/net.d/
+        - /var/lib/kubelet/
         - /home/{{remote_user}}/.kube/
+
+    # - name: Prune docker system and remove all containers, volumes.
+    #   command: "{{item}}"
+    #   become: false
+    #   with_items:
+    #     - docker system prune -f
+    #     - docker container stop $(docker container ls -aq)
+    #     - docker container rm $(docker container ls -aq)
+    #     - docker volume prune -f
+
+    - name: Reload kubelet
+      service:
+        name: kubelet
+        state: restarted
+
+    - name: Restart Docker
+      systemd:
+        name: "docker"
+        state: "restarted"
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: true

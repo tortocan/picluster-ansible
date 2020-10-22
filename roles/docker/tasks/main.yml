@@ -1,67 +1,156 @@
 ---
-  # - name: Remove previous version of docker and docker engine
-  #   apt:
-  #     name: "{{ packages }}"
-  #     state: absent
-  #     update_cache: yes
-  #   vars:
-  #     packages:
-  #        - docker
-  #        - docker.io
-  #        - docker-engine
-  #        - containerd
-  #        - runc
+# - name: Remove previous version of docker and docker engine
+#   apt:
+#     name: "{{ packages }}"
+#     state: absent
+#     update_cache: yes
+#   vars:
+#     packages:
+#        - docker
+#        - docker.io
+#        - docker-engine
+#        - containerd
+#        - runc
 
-  - name: Add an apt signing key for Docker
-    apt_key:
-      url: https://download.docker.com/linux/ubuntu/gpg
+- name: Add an apt signing key for Docker
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Add apt repository for stable version
+  apt_repository:
+    update_cache: yes
+    repo: deb [arch=arm64] https://download.docker.com/linux/ubuntu focal stable
+    state: present
+
+- name: Install docker and its dependecies
+  apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+  vars:
+    packages:
+    - docker-ce
+    - docker-ce-cli
+    - containerd.io
+
+# - name: Remove swapfile from /etc/fstab
+#   mount:
+#     name: "{{ item }}"
+#     fstype: swap
+#     state: absent
+#   with_items:
+#     - swap
+#     - none
+
+# - name: Disable swap
+#   command: swapoff -a
+#   when: ansible_swaptotal_mb > 0
+
+
+- name: Disable swap
+  command:  "{{ item }}"
+  become: yes
+  with_items:
+    - dphys-swapfile swapoff
+    - dphys-swapfile uninstall
+    - update-rc.d dphys-swapfile remove
+    - systemctl disable dphys-swapfile.service
+
+- name: "Searching for a cgroup_enable_cpuset"
+  lineinfile:
+    path: /boot/firmware/cmdline.txt
+    line: "cgroup_enable=cpuset"
+    regex: "cgroup_enable=cpuset"
+    state: present
+  check_mode: yes
+  register: cgroup_enable_cpuset
+
+- name: 'Enable cgroup_enable=cpuset'
+  command: sed -i '1s/$/ cgroup_enable=cpuset/' /boot/firmware/cmdline.txt
+  when: cgroup_enable_cpuset.msg == "line added"
+  register: _boot_config
+
+- name: "Searching for a cgroup_enable_memory"
+  lineinfile:
+    path: /boot/firmware/cmdline.txt
+    line: "cgroup_enable=memory"
+    regex: "cgroup_enable=memory"
+    state: present
+  check_mode: yes
+  register: cgroup_enable_memory
+
+- name: 'Enable cgroup_enable=memory'
+  command: sed -i '1s/$/ cgroup_enable=memory/' /boot/firmware/cmdline.txt
+  when: cgroup_enable_memory.msg == "line added"
+  register: _boot_config
+
+
+- name: "Searching for a cgroup_memory"
+  lineinfile:
+    path: /boot/firmware/cmdline.txt
+    line: "cgroup_memory=1"
+    regex: "cgroup_memory=1"
+    state: present
+  check_mode: yes
+  register: cgroup_memory
+
+- name: 'Enable cgroup_memory=1'
+  command: sed -i '1s/$/ cgroup_memory=1/' /boot/firmware/cmdline.txt
+  when: cgroup_memory.msg == "line added"
+  register: _boot_config
+
+
+- name: "Searching for a swapaccount=1"
+  lineinfile:
+    path: /boot/firmware/cmdline.txt
+    line: "swapaccount=1"
+    regex: "swapaccount=1"
+    state: present
+  check_mode: yes
+  register: swapaccount
+
+
+- name: 'Enable swapaccount=1'
+  command: sed -i '1s/$/ swapaccount=1/' /boot/firmware/cmdline.txt
+  when: swapaccount.msg == "line added"
+  register: _boot_config
+
+
+- name: Disable Bluetooth and WiFi
+  become: yes
+  lineinfile:
+      path: /boot/firmware/usercfg.txt
+      line: "{{item}}"
+      regex: "{{item}}"
       state: present
+  register: _user_config
+  with_items:
+  - dtoverlay=disable-wifi
+  - dtoverlay=disable-bt
 
-  - name: Add apt repository for stable version
-    apt_repository:
-      update_cache: yes
-      repo: deb [arch=arm64] https://download.docker.com/linux/ubuntu focal stable
-      state: present
 
-  - name: Install docker and its dependecies
-    apt:
-      name: "{{ packages }}"
-      state: present
-      update_cache: yes
-    vars:
-      packages:
-      - docker-ce
-      - docker-ce-cli
-      - containerd.io
+- name: Configure Docker daemon options (json)
+  template:
+    src: "etc/docker/daemon.json.j2"
+    dest: "/etc/docker/daemon.json"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  when: docker__default_daemon_json | d() or docker__daemon_json | d()
+  notify:
+    - "Restart Docker"
+    - systemd_reload
 
-  - name: Remove swapfile from /etc/fstab
-    mount:
-      name: "{{ item }}"
-      fstype: swap
-      state: absent
-    with_items:
-      - swap
-      - none
+- name: Add user(s) to "docker" group
+  user:
+    name: "{{ item }}"
+    groups: "docker"
+    append: true
+  loop: "{{ docker__users }}"
 
-  - name: Disable swap
-    command: swapoff -a
-    when: ansible_swaptotal_mb > 0
-
-  - name: Configure Docker daemon options (json)
-    template:
-      src: "etc/docker/daemon.json.j2"
-      dest: "/etc/docker/daemon.json"
-      owner: "root"
-      group: "root"
-      mode: "0644"
-    when: docker__default_daemon_json | d() or docker__daemon_json | d()
-    notify:
-      - "Restart Docker"
-      - systemd_reload
-
-  - name: Add user(s) to "docker" group
-    user:
-      name: "{{ item }}"
-      groups: "docker"
-      append: true
-    loop: "{{ docker__users }}"
+- name: "restart machine"  # noqa 503
+  reboot:
+    msg: "Reboot by Ansible, because config changed."
+    reboot_timeout: 300   # (= 5 minutes)
+  when: _boot_config.changed

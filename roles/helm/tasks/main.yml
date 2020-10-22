@@ -29,3 +29,7 @@
     remote_src: true
   become: true
   when: helm_download is changed
+
+- name: Add bashcompletion
+  become: false
+  shell: "helm completion bash | sudo tee /etc/bash_completion.d/helm > /dev/null"

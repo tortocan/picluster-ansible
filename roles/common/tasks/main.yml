@@ -1,3 +1,74 @@
+
+- name: Check if snap exists
+  stat: path=/var/lib/snapd
+  register: snap
+
+- name: Remove Snaps
+  become: yes
+  command: "snap remove {{item}}"
+  with_items:
+  - lxd
+  - core18
+  - snapd
+  when: snap.stat.exists
+
+- name: Remove "snap" package
+  apt:
+    name: snapd
+    purge: 'yes'
+    state: absent
+  when: snap.stat.exists
+
+- name: Disable Bluetooth and WiFi
+  become: yes
+  lineinfile:
+    path: /boot/firmware/usercfg.txt
+    line: "{{item}}"
+    regex: "{{item}}"
+    state: present
+  register: _user_config
+  with_items:
+  - dtoverlay=disable-wifi
+  - dtoverlay=disable-bt
+
+- name: DNS stop systemd-resolved from using port 53
+  lineinfile:
+    path: /etc/systemd/resolved.conf
+    line: "DNSStubListener=no"
+    regex: "#DNSStubListener=yes"
+    state: present
+  register: _systemd_result
+
+- name: Create a symbolic link
+  become: yes
+  file:
+    force: yes
+    src: /run/systemd/resolve/resolv.conf
+    dest: /etc/resolv.conf
+    state: link
+
+- name: Set a hostname
+  hostname:
+    name: "{{inventory_hostname}}"
+  register: _hostname_result
+
+- name: Fix sudo su hostname
+  become: yes
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 {{inventory_hostname}} localhost"
+    regex: "127.0.0.1 localhost"
+    state: present
+
+- name: Reload systemd
+  become: yes
+  systemd:
+    daemon_reload: true
+  when: _systemd_result.changed
+
+- include: reboot-task.yml
+  when: _systemd_result.changed or _user_config.changed or _hostname_result.changed
+
 - name: 'Update and upgrade apt packages'
   become: yes
   apt:
@@ -29,87 +100,16 @@
       - git
       - bash-completion
       - nfs-common
+      - dphys-swapfile
+      - lvm2
+      - xfsprogs
+      - btrfs-progs
+      - ceph-common
 
-- name: "Searching for a cgroup_enable_cpuset"
-  lineinfile:
-    path: /boot/firmware/cmdline.txt
-    line: "cgroup_enable=cpuset"
-    regex: "cgroup_enable=cpuset"
-    state: present
-  check_mode: yes
-  register: cgroup_enable_cpuset
-
-- name: 'Enable cgroup_enable=cpuset'
-  command: sed -i '1s/$/ cgroup_enable=cpuset/' /boot/firmware/cmdline.txt
-  when: cgroup_enable_cpuset.msg == "line added"
-  register: _boot_config
-
-- name: "Searching for a cgroup_enable_memory"
-  lineinfile:
-    path: /boot/firmware/cmdline.txt
-    line: "cgroup_enable=memory"
-    regex: "cgroup_enable=memory"
-    state: present
-  check_mode: yes
-  register: cgroup_enable_memory
-
-- name: 'Enable cgroup_enable=memory'
-  command: sed -i '1s/$/ cgroup_enable=memory/' /boot/firmware/cmdline.txt
-  when: cgroup_enable_memory.msg == "line added"
-  register: _boot_config
-
-
-- name: "Searching for a cgroup_memory"
-  lineinfile:
-    path: /boot/firmware/cmdline.txt
-    line: "cgroup_memory=1"
-    regex: "cgroup_memory=1"
-    state: present
-  check_mode: yes
-  register: cgroup_memory
-
-- name: 'Enable cgroup_memory=1'
-  command: sed -i '1s/$/ cgroup_memory=1/' /boot/firmware/cmdline.txt
-  when: cgroup_memory.msg == "line added"
-  register: _boot_config
-
-
-- name: "Searching for a swapaccount=1"
-  lineinfile:
-    path: /boot/firmware/cmdline.txt
-    line: "swapaccount=1"
-    regex: "swapaccount=1"
-    state: present
-  check_mode: yes
-  register: swapaccount
-
-
-- name: 'Enable swapaccount=1'
-  command: sed -i '1s/$/ swapaccount=1/' /boot/firmware/cmdline.txt
-  when: swapaccount.msg == "line added"
-  register: _boot_config
-
-
-- name: Disable Bluetooth and WiFi
-  become: yes
-  lineinfile:
-      path: /boot/firmware/usercfg.txt
-      line: "{{item}}"
-      regex: "{{item}}"
-      state: present
-  register: _user_config
-  with_items:
-  - dtoverlay=disable-wifi
-  - dtoverlay=disable-bt
-
-
-- name: Set a hostname
-  hostname:
-    name: "{{inventory_hostname}}"
-  register: _hostname_result
-
-- name: "restart machine"  # noqa 503
-  reboot:
-    msg: "Reboot by Ansible, because config changed."
-    reboot_timeout: 300   # (= 5 minutes)
-  when: _boot_config.changed or _user_config.changed or _hostname_result.changed
+# - name: 'Install ntp'
+#   become: yes
+#   apt:
+#     state: absent
+#     pkg:
+#       - ntp
+#       - ntpdate

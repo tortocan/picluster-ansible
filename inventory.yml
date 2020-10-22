@@ -2,20 +2,20 @@
 all:
   hosts:
     c1-master1:
-      ansible_host: 192.168.0.20
-      node_mac: DC:A6:32:32:2E:CE
-    c1-node1:
-      ansible_host: 192.168.0.16
-      node_mac: DC:A6:32:32:46:31
-      disk: 0
-    c1-node2:
-      ansible_host: 192.168.0.18
+      ansible_host: 192.168.0.11
       node_mac: DC:A6:32:B6:3E:01
-      disk: 1
+    c1-node1:
+      ansible_host: 192.168.0.21
+      node_mac: DC:A6:32:32:46:31
+      disk: /dev/sdb
+    c1-node2:
+      ansible_host: 192.168.0.31
+      node_mac: DC:A6:32:32:2E:CE
+      disk: /dev/sdb
     c1-node3:
-      ansible_host: 192.168.0.13
+      ansible_host: 192.168.0.41
       node_mac: DC:A6:32:32:45:E1
-      disk: 2
+      disk: /dev/sdb
   children:
     ubuntu_os:
       hosts:

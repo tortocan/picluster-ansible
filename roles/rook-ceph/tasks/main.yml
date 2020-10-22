@@ -1,0 +1,89 @@
+- name: Retrieve and template rook manifests.
+  become: false
+  block:
+    - name: Clone the rook project.
+      git:
+        repo: https://github.com/rook/rook.git
+        dest: ~/rook
+        version: "{{ rook_version }}"
+        force: yes
+
+    - name: Ceph img ARM64
+      replace:
+        path: ~/rook/cluster/examples/kubernetes/ceph/cluster.yaml
+        regexp: "    image: ceph/ceph:v15.2.4"
+        replace: "    image: ceph/ceph-arm64:v15.2.5-20200916"
+
+    # - name: Change dashboard port
+    #   replace:
+    #     path: ~/rook/cluster/examples/kubernetes/ceph/cluster.yaml
+    #     regexp: "    # port: 8443"
+    #     replace: "    port: 8443"
+
+    # - name: Modify operator
+    #   lineinfile:
+    #       path:  ~/rook/cluster/examples/kubernetes/ceph/operator.yaml
+    #       line: "  {{item}}"
+    #       regex: "  {{item.split(':')[0]}}"
+    #       state: present
+    #   with_items:
+    #   - 'ROOK_CSI_ALLOW_UNSUPPORTED_VERSION: "true"'
+
+    - name: Uncomment operator
+      lineinfile:
+          path:  ~/rook/cluster/examples/kubernetes/ceph/operator.yaml
+          line: "  {{item}}"
+          regex: "# {{item.split(':')[0]}}"
+          state: present
+      with_items:
+      - 'ROOK_CSI_CEPH_IMAGE: "raspbernetes/ceph-csi:v3.1.1-arm64"'
+      - 'ROOK_CSI_REGISTRAR_IMAGE: "raspbernetes/csi-node-driver-registrar:2.0.1"'
+      - 'ROOK_CSI_RESIZER_IMAGE: "raspbernetes/csi-external-resizer:0.5.0"'
+      - 'ROOK_CSI_PROVISIONER_IMAGE: "raspbernetes/csi-external-provisioner:1.6.0"'
+      - 'ROOK_CSI_SNAPSHOTTER_IMAGE: "raspbernetes/csi-external-snapshotter:2.1.1"'
+      - 'ROOK_CSI_ATTACHER_IMAGE: "raspbernetes/csi-external-attacher:2.2.0"'
+
+    # - name: Delete pods
+    #   ignore_errors: yes
+    #   command: "{{item}}"
+    #   with_items:
+    #     - "kubectl -n rook-ceph delete deployments --all"
+    #     - "kubectl -n rook-ceph delete replicasets --all"
+    #     - "kubectl -n rook-ceph delete po --all"
+    #     - "kubectl -n rook-ceph delete replicasets --all"
+
+    - name: Apply manifests.
+      command: "kubectl apply -f {{item}}"
+      with_items:
+        - ~/rook/cluster/examples/kubernetes/ceph/common.yaml
+        - ~/rook/cluster/examples/kubernetes/ceph/operator.yaml
+        - ~/rook/cluster/examples/kubernetes/ceph/cluster.yaml
+        - ~/rook/cluster/examples/kubernetes/ceph/csi/rbd/storageclass.yaml
+        - ~/rook/cluster/examples/kubernetes/ceph/filesystem.yaml
+        - ~/rook/cluster/examples/kubernetes/ceph/csi/cephfs/storageclass.yaml
+        - ~/rook/cluster/examples/kubernetes/ceph/csi/cephfs/kube-registry.yaml
+        - ~/rook/cluster/examples/kubernetes/ceph/dashboard-loadbalancer.yaml
+
+    # - name: Write rook toolbox script
+    #   shell: |
+    #     echo '
+    #     BACK_PID=0
+    #     kubectl apply -f ~/rook/cluster/examples/kubernetes/ceph/toolbox.yaml &
+    #     BACK_PID=$!
+    #     wait $BACK_PID
+    #     i=1
+    #     sp="/-\|"
+    #     while [[ $(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o ''jsonpath={..status.conditions[?(@.type=="Ready")].status}'') != "True" ]]; do printf "\b${sp:i++%${#sp}:1}"&& sleep 1; done
+    #     ROOK_TOOL_PODNAME=$(kubectl -n rook-ceph get pod -l "app=rook-ceph-tools" -o jsonpath="{.items[0].metadata.name}")
+    #     kubectl -n rook-ceph exec -it $ROOK_TOOL_PODNAME -- bash
+    #     kubectl delete -f ~/rook/cluster/examples/kubernetes/ceph/toolbox.yaml' > ~/toolbox.sh
+
+    # - name: Changing perm of "~/toolbox.sh", adding "+x"
+    #   file: dest=~/toolbox.sh mode=a+x
+
+    - name: Dashboard password
+      become: false
+      shell: 'kubectl -n rook-ceph get secret rook-ceph-dashboard-password -o jsonpath="{[''data''][''password'']}" | base64 --decode && echo'
+      register: dashboard_result
+    - debug:
+        var: dashboard_result.stdout

@@ -1,7 +1,4 @@
-- hosts: k8s_master
-  user: ubuntu
-  become: yes
-  become_user: root
-  become_method: sudo
+- hosts: all
+  # gather_facts: no
   roles:
-    - adhoc
+    - common

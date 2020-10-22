@@ -1,0 +1,51 @@
+- hosts: k8s_master
+  become: false
+  ignore_errors: true
+  tasks:
+    - name: Delete the Block and File artifacts
+      command: "{{item}}"
+      with_items:
+        - kubectl delete -n rook-ceph cephblockpool replicapool
+        - kubectl delete storageclass rook-ceph-block
+        - kubectl delete -f ~/rook/cluster/examples/kubernetes/ceph/csi/cephfs/kube-registry.yaml
+        - kubectl delete storageclass csi-cephfs
+
+    - name: Removing the Cluster CRD Finalizer
+      shell: |
+        for CRD in $(kubectl get crd -n rook-ceph | awk '/ceph.rook.io/ {print $1}')
+        do
+          kubectl patch crd -n rook-ceph $CRD --type merge -p '{"metadata":{"finalizers": [null]}}'
+        done
+
+    - name: Delete the CephCluster CRD
+      command: kubectl -n rook-ceph delete cephcluster rook-ceph
+      register: cephCluster
+
+    - name: Delete the Operator and related Resources
+      command: "{{item}}"
+      with_items:
+        - kubectl delete -f ~/rook/cluster/examples/kubernetes/ceph/operator.yaml
+        - kubectl delete -f ~/rook/cluster/examples/kubernetes/ceph/common.yaml
+        - kubectl delete -f ~/rook/cluster/examples/kubernetes/ceph/cluster.yaml
+        - kubectl delete -f ~/rook/cluster/examples/kubernetes/ceph/toolbox.yaml
+        - kubectl delete -f ~/rook/cluster/examples/kubernetes/ceph/dashboard-loadbalancer.yaml
+        - kubectl delete -f ~/rook/cluster/examples/kubernetes/ceph/filesystem.yaml
+        - kubectl delete -f ~/rook/cluster/examples/kubernetes/ceph/csi/cephfs/storageclass.yaml
+        - kubectl delete -f ~/rook/cluster/examples/kubernetes/ceph/csi/cephfs/kube-registry.yaml
+        - kubectl -n rook-ceph delete cephfilesystem myfs
+
+
+
+- hosts: k8s_worker
+  become: true
+  ignore_errors: true
+  tasks:
+    - name: Delete the data on hosts
+      command: "{{item}}"
+      with_items:
+        - sgdisk --zap-all {{disk}}
+        - dd if=/dev/zero of="{{disk}}" bs=1M count=100 oflag=direct,dsync
+        - blkdiscard {{disk}}
+        - ls /dev/mapper/ceph-* | xargs -I% -- dmsetup remove %
+        - rm -rf /dev/ceph-*
+        - rm -fdr /var/lib/rook

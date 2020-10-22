@@ -1,10 +1,3 @@
-- name: Delete nodes
-  delegate_to: "{{ groups['k8s_master'][0] }}"
-  run_once: true
-  become: false
-  command:  kubectl delete node --selector='!node-role.kubernetes.io/master'
-  register: leave_command
-
 - name: Generate join command
   delegate_to: "{{ item }}"
   become: false
@@ -31,4 +24,3 @@
     path: /mnt/disk/vol1
     state: directory
     mode: '0777'
-

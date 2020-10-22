@@ -13,7 +13,7 @@
 - name: Fix net.bridge.bridge-nf-call-iptables issue
   become: yes
   sysctl:
-    name: net.bridge.bridge-nf-call-iptables
+    name: "{{item}}"
     value: 1
     sysctl_set: yes
     state: present
@@ -21,6 +21,11 @@
   with_items:
   - net.bridge.bridge-nf-call-iptables
   - net.bridge.bridge-nf-call-ip6tables
+  - net.bridge.bridge-nf-call-arptables
+
+- name: Set iptables-legacy
+  become: yes
+  command: "update-alternatives --set iptables /usr/sbin/iptables-legacy"
 
 - name: Install Kubernetes binaries
   apt:
@@ -32,6 +37,7 @@
       - kubelet
       - kubeadm
       - kubectl
+      - kubetail
 
 
 # - name: Configure node ip
