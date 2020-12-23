@@ -1,43 +1,12 @@
-- name: Create nginx-deployment
-  become: false
-  k8s:
-    state: present
-    definition:
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        namespace: default
-        name: nginx-deployment
-      spec:
-        selector:
-          matchLabels:
-            app: nginx
-        replicas: 3
-        template:
-          metadata:
-            labels:
-              app: nginx
-          spec:
-            containers:
-            - name: nginx
-              image: nginx:latest
-              ports:
-              - containerPort: 80
 
-- name: Create nginx-service
-  become: false
-  k8s:
-    state: present
-    definition:
-      apiVersion: v1
-      kind: Service
-      metadata:
-        namespace: default
-        name: nginx
-      spec:
-        type: LoadBalancer
-        selector:
-          app: nginx
-        ports:
-        - port: 80
-          name: http
+- name: Mount up root
+  mount:
+    src: "{{os_disk}}2"
+    path: "./rootmnt"
+    state: mounted
+    fstype: ext4
+
+- name: Configure Cloud Init
+  template:
+    src: "etc/cloud/cloud.yml.j2"
+    dest: "./rootmnt/etc/cloud/cloud.cfg"

@@ -2,30 +2,44 @@
 all:
   hosts:
     c1-master1:
-      ansible_host: 192.168.0.11
-      node_mac: DC:A6:32:B6:3E:01
+      ansible_host: "{{ip_class}}51"
+      node_mac: dc:a6:32:32:45:e1
+      node_serial: b582d82e
+      os_disk: /dev/sda
+    c1-master2:
+      ansible_host: "{{ip_class}}52"
+      node_mac: dc:a6:32:32:46:31
+      node_serial: 057754e6
+      os_disk: /dev/sda
+    c1-master3:
+      ansible_host: "{{ip_class}}53"
+      node_mac: dc:a6:32:32:2e:ce
+      node_serial: c365f9ab
+      os_disk: /dev/sda
     c1-node1:
-      ansible_host: 192.168.0.21
-      node_mac: DC:A6:32:32:46:31
+      ansible_host: "{{ip_class}}101"
+      node_mac: dc:a6:32:b6:3e:01
+      node_serial: 23db7b6d
+      os_disk: /dev/sda
       disk: /dev/sdb
     c1-node2:
-      ansible_host: 192.168.0.31
-      node_mac: DC:A6:32:32:2E:CE
+      ansible_host: "{{ip_class}}102"
+      node_mac: dc:a6:32:d5:41:b4
+      node_serial: 1691df47
+      os_disk: /dev/sda
       disk: /dev/sdb
     c1-node3:
-      ansible_host: 192.168.0.41
-      node_mac: DC:A6:32:32:45:E1
+      ansible_host: "{{ip_class}}103"
+      node_mac: dc:a6:32:d5:cf:d0
+      node_serial: 13693741
+      os_disk: /dev/sda
       disk: /dev/sdb
   children:
-    ubuntu_os:
-      hosts:
-        c1-node1: {}
-        c1-node3: {}
-        c1-node2: {}
-        c1-master1: {}
     k8s_master:
       hosts:
         c1-master1: {}
+        c1-master2: {}
+        c1-master3: {}
     k8s_worker:
       hosts:
         c1-node1: {}
@@ -33,4 +47,10 @@ all:
         c1-node2: {}
   vars:
     ansible_python_interpreter: /usr/bin/python3
-    remote_user: ubuntu
+    ip_class: 10.0.1.
+    pxe_host: "{{ip_class}}38"
+    root_path: "/srv/nfs/rpi4-{{node_serial}}"
+    boot_path: "/srv/tftp/{{node_serial}}"
+    pi_eeprom_version: "pieeprom-2020-12-11"
+
+  

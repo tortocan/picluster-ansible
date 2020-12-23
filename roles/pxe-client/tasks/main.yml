@@ -1,0 +1,107 @@
+- name: Clean boot path
+  delegate_to: localhost
+  file:
+    state: absent
+    path: "{{boot_path}}"
+
+- name: Copy boot into place.
+  delegate_to: localhost
+  shell: cp -a "./bootmnt/" "{{boot_path}}"
+
+- name: Clean root path
+  delegate_to: localhost
+  file:
+    state: absent
+    path: "{{root_path}}"
+
+- name: Copy root into place.
+  delegate_to: localhost
+  shell: cp -a "./rootmnt/" "{{root_path}}"
+
+- name: Disable Bluetooth and WiFi
+  become: yes
+  delegate_to: localhost
+  lineinfile:
+    path: "{{boot_path}}/config.txt"
+    line: "{{item}}"
+    regex: "{{item}}"
+    state: present
+  register: _config
+  with_items:
+  - dtoverlay=disable-wifi
+  - dtoverlay=disable-bt
+
+- name: Cleanup boot configuration
+  delegate_to: localhost
+  lineinfile:
+    path: "{{boot_path}}/cmdline.txt"
+    regexp: "UUID=\\d"
+    state: absent
+
+- name: Boot configuration
+  become: yes
+  delegate_to: localhost
+  lineinfile:
+    path: "{{boot_path}}/cmdline.txt"
+    line: "{{item}}"
+    regex: "{{item}}"
+    state: present
+  register: _cmdline
+  with_items:
+  - "console=serial0,115200 console=tty1 root=/dev/nfs nfsroot={{pxe_host}}:{{root_path}},vers=4.1,proto=tcp rw ip=dhcp rootwait elevator=deadline"
+
+- name: Cleanup fstab
+  delegate_to: localhost
+  lineinfile:
+    path: "{{root_path}}/etc/fstab"
+    regexp: "UUID=\\d"
+    state: absent
+
+- name: fstab configuration
+  become: yes
+  delegate_to: localhost
+  lineinfile:
+    path: "{{root_path}}/etc/fstab"
+    line: "{{item}}"
+    regex: "{{item}}"
+    state: present
+  register: _fstab
+  with_items:
+  - "{{pxe_host}}:{{boot_path}} /boot nfs defaults,vers=4.1,proto=tcp 0 0"
+
+- name: exports configuration
+  become: yes
+  delegate_to: localhost
+  lineinfile:
+    path: "/etc/exports"
+    line: "{{item}}"
+    regex: "{{item}}"
+    state: present
+  register: _exports
+  with_items:
+  - "{{root_path}} *(rw,sync,no_subtree_check,no_root_squash)"
+  - "{{boot_path}} *(rw,sync,no_subtree_check,no_root_squash)"
+
+- name: Restart services
+  delegate_to: localhost
+  systemd:
+    name: "{{item}}"
+    state: "restarted"
+  with_items:
+    - nfs-server
+    - tftpd-hpa
+  
+- name: Reload systemd
+  delegate_to: localhost
+  command: systemctl daemon-reload
+
+- name: Check if ssh exists
+  stat: path="{{boot_path}}/ssh"
+  register: ssh
+
+- name: Enable ssh
+  delegate_to: localhost
+  file: 
+    path: "{{boot_path}}/ssh"
+    state: touch
+  when: ssh.stat.exists == false

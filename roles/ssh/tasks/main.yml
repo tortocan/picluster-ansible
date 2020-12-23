@@ -1,131 +1,150 @@
+- name: Check if TFTP boot path exists
+  delegate_to: localhost
+  stat: path={{boot_path}}
+  register: bootpath
 
-    - name: check .ssh local directory exists
-      stat:
-        path: "~/.ssh"
-      register: ssh_directory_exists_check
+- name: Move/Enable TFTP boot path
+  delegate_to: localhost
+  shell: mv "{{boot_path}}-disable" "{{boot_path}}"
+  when: bootpath.stat.exists == false
 
-    # - debug:
-    #     var: ssh_directory_exists_check
+- name: Enable NFS and TFTP exports
+  become: yes
+  delegate_to: localhost
+  lineinfile:
+    path: "/etc/exports"
+    line: "{{item}}"
+    regex: "{{item}}"
+    state: present
+  register: _exports
+  with_items:
+    - "{{boot_path}} *(rw,sync,no_subtree_check,no_root_squash)"
+    - "{{root_path}} *(rw,sync,no_subtree_check,no_root_squash)"
 
-    - name: Check needed OS tools exist
-      shell: which sshpass ssh-keygen ssh-copy-id
-      register: os_tools_exist
-      ignore_errors: true
+- name: Restart services
+  delegate_to: localhost
+  systemd:
+    name: "{{item}}"
+    state: "restarted"
+  with_items:
+    - nfs-server
+    - tftpd-hpa
+  when: _exports.changed
 
-    - name: Fail execution if any of the needed OS tools is missing
-      fail:
-        msg: "One or more of the: sshpass, ssh-keygen, ssh-copy-id are missing on this machine. Please install them - using your distribution's recommended method - before continuing."
-      when: os_tools_exist.rc != 0
+- name: Reload systemd
+  delegate_to: localhost
+  command: systemctl daemon-reload
+  # when: _exports.changed
 
-    - name: create ~/.ssh local directory
-      delegate_to: localhost
-      file:
-        path: "~/.ssh"
-        state: directory
-        mode: "0700"
-      register: ssh_directory_creation
-      when: ssh_directory_exists_check is defined and ssh_directory_exists_check.stat.exists == false
+- set_fact: wait_host="{{ ansible_host }}"
+- name: Waiting 60 secs for server to come back
+  local_action: wait_for host={{wait_host}} port=22 delay=20 connect_timeout=200
+  become: false
+  delegate_to: localhost
+  delegate_facts: true
 
-    - debug:
-        var: ssh_directory_creation
+- name: Update and upgrade apt packages
+  delegate_to: localhost
+  run_once: true
+  apt:
+    upgrade: yes
+    update_cache: yes
+    cache_valid_time: 86400
 
-    - name: check .ssh key file exists
-      stat:
-        path: "~/.ssh/{{item}}"
-      register: ssh_key_file_exists_check
-      with_items:
-        - "id_rsa"
-        - "id_rsa.pub"
+- name: Install packages
+  delegate_to: localhost
+  run_once: true
+  apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+  vars:
+    packages:
+    - sshpass 
 
-    - debug:
-        var: ssh_key_file_exists_check.results[1].stat.exists
+- name: check .ssh local directory exists
+  delegate_to: localhost
+  run_once: true
+  stat:
+    path: "~/.ssh"
+  register: ssh_directory_exists_check
 
-    - name: generate ssh key on local machine
-      shell: "ssh-keygen -t rsa -f ~/.ssh/id_rsa -P \"\""
-      register: ssh_key_creation
-      failed_when: ssh_key_creation.rc != 0
-      when: ssh_key_file_exists_check is defined and ssh_key_file_exists_check.results[0].stat.exists == false and ssh_key_file_exists_check.results[1].stat.exists == false
+- name: Check needed OS tools exist
+  delegate_to: localhost
+  run_once: true
+  shell: which sshpass ssh-keygen ssh-copy-id
+  register: os_tools_exist
+  ignore_errors: true
 
-    - debug:
-        var: ssh_key_creation
+- name: Fail execution if any of the needed OS tools is missing
+  run_once: true
+  fail:
+    msg: "One or more of the: sshpass, ssh-keygen, ssh-copy-id are missing on this machine. Please install them - using your distribution's recommended method - before continuing."
+  when: os_tools_exist.rc != 0
 
-    - name: check .ssh/config file exists
-      stat:
-        path: "~/.ssh/config"
-      register: ssh_config_file_exists_check
+- name: create ~/.ssh local directory
+  delegate_to: localhost
+  run_once: true
+  file:
+    path: "~/.ssh"
+    state: directory
+    mode: "0700"
+  register: ssh_directory_creation
+  when: ssh_directory_exists_check is defined and ssh_directory_exists_check.stat.exists == false
 
-    # - debug:
-    #     var: ssh_config_file_exists_check
+- name: check .ssh key file exists
+  delegate_to: localhost
+  run_once: true
+  stat:
+    path: "~/.ssh/{{item}}"
+  register: ssh_key_file_exists_check
+  with_items:
+    - "id_rsa"
+    - "id_rsa.pub"
 
-    - name: create the ~/.ssh/config file
-      file:
-        path: "~/.ssh/config"
-        state: touch
-        mode: "0644"
-      register: ssh_config_file_creation
-      when: ssh_config_file_exists_check is defined and ssh_config_file_exists_check.stat.exists == false
+- name: generate ssh key on local machine
+  delegate_to: localhost
+  run_once: true
+  shell: "ssh-keygen -t rsa -f ~/.ssh/id_rsa -P \"\""
+  register: ssh_key_creation
+  failed_when: ssh_key_creation.rc != 0
+  when: ssh_key_file_exists_check is defined and ssh_key_file_exists_check.results[0].stat.exists == false and ssh_key_file_exists_check.results[1].stat.exists == false
 
-    - name: add the new ssh key to the ~/.ssh/config file
-      lineinfile:
-        path: "~/.ssh/config"
-        line: "IdentityFile ~/.ssh/id_rsa"
-        state: present
-        backup: yes
-      register: ssh_config_file_key_addition
+- name: check .ssh/config file exists
+  delegate_to: localhost
+  run_once: true
+  stat:
+    path: "~/.ssh/config"
+  register: ssh_config_file_exists_check
 
-    # - debug:
-    #     var: ssh_config_file_key_addition
+- name: create the ~/.ssh/config file
+  delegate_to: localhost
+  run_once: true
+  file:
+    path: "~/.ssh/config"
+    state: touch
+    mode: "0644"
+  register: ssh_config_file_creation
+  when: ssh_config_file_exists_check is defined and ssh_config_file_exists_check.stat.exists == false
 
-    # - name: Get current ip configuration
-    #   delegate_to: localhost
-    #   shell: "for ((i=1; i<=255; i++));do arp -i en0 192.168.0.$i; done | grep {{ hostvars[item].node_mac }} | awk '{print $2}' | sed -e 's/(//' -e 's/)//'"
-    #   register: _ip_result
-    #   with_items:
-    #     - "{{ groups['all']}}"
-    #   failed_when: _ip_result.rc != 0
-    # sudo nmap -sP 192.168.0.0/26 | grep -B 2 -E 'DC:A6:32:32:2E:CF|DC:A6:32:32:46:31|DC:A6:32:32:2E:CE|DC:A6:32:32:45:E1' | grep report | cut -d ' ' -f 5
+- name: add the new ssh key to the ~/.ssh/config file
+  delegate_to: localhost
+  run_once: true
+  lineinfile:
+    path: "~/.ssh/config"
+    line: "IdentityFile ~/.ssh/id_rsa"
+    state: present
+    backup: yes
+  register: ssh_config_file_key_addition
+  when: ssh_key_file_exists_check is defined and ssh_key_file_exists_check.results[0].stat.exists == false and ssh_key_file_exists_check.results[1].stat.exists == false
 
+- name: Cleanup ssh hosts
+  delegate_to: localhost
+  run_once: true
+  shell: echo "" > ~/.ssh/known_hosts
 
-    # - name: Get current ip configuration
-    #   delegate_to: localhost
-    #   become: yes
-    #   shell: "nmap -p 22 --open 192.168.0.0/26 | awk -v mac='{{hostvars[item].node_mac}}' '/report for/{ip=$5}$0~mac{print ip}'"
-    #   register: _ip_result
-    #   with_items:
-    #     - "{{ groups['all']}}"
-    #   failed_when: _ip_result.rc != 0
-
-    # - debug:
-    #     var: _ip_result
-
-
-    # - debug:
-    #     var: _ip_result | json_query('results[*].stdout')
-
-
-
-      # - name: Cleanupn known hosts
-    #   shell: "ssh-keygen -f /home/{{remote_user}}/.ssh/known_hosts -R {{hostvars[item].ansible_host }}"
-    #   loop: "{{groups['all']}}"
-
-    # - name: Cleanupn known hosts
-    #   shell: "ssh-keygen -f /home/{{remote_user}}/.ssh/known_hosts -R {{hostvars[item].ansible_host }}"
-    #   loop: "{{groups['all']}}"
-
-    - name: Distribute the ssh key to the remote hosts
-      delegate_to: localhost
-      shell: "ssh-copy-id -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa.pub {{remote_user}}@{{ hostvars[item].ansible_host }} -f"
-      register: ssh_copy_id_execution
-      loop: "{{groups['all'] }}"
-      failed_when: ssh_copy_id_execution.rc != 0
-
-    # - debug:
-    #     var: ssh_copy_id_execution
-
-    # - name: check ssh to remote hosts works
-    #   shell: "hostname; id"
-    #   register: ssh_connection_test
-    #   failed_when: ssh_connection_test.rc != 0
-
-    # - debug:
-    #     var: ssh_connection_test.stdout_lines
+- name: Distribute the ssh key to the remote hosts
+  delegate_to: localhost
+  shell: "ssh-copy-id -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa.pub {{remote_user}}@{{ ansible_host }} -f"
+  register: ssh_copy_id_execution
+  failed_when: ssh_copy_id_execution.rc != 0

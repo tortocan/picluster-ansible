@@ -1,4 +1,20 @@
-- hosts: ubuntu_os
+- hosts: all
+  # strategy: debug
+  gather_facts: no
+  connection: local
+  vars:
+    remote_user: pi
+  roles:
+    - ssh
+
+- hosts: all
+  become: yes
+  user: pi
+  roles:
+    # - pi-update-rom
+    - ubuntu-os
+
+- hosts: all
   # strategy: debug
   # gather_facts: yes
   user: ubuntu

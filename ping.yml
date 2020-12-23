@@ -1,5 +1,8 @@
 
 - hosts: all
   gather_facts: false
+  remote_user: pi
   tasks:
     - ping:
+
+# raspberry 
