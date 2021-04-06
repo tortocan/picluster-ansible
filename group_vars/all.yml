@@ -1,3 +1,0 @@
----
-load_balancer_server_ip_tcp: 192.168.0.245
-load_balancer_server_ip_udp: 192.168.0.245

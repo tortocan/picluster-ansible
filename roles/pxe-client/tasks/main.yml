@@ -1,24 +1,92 @@
+- name: Restart server
+  connection: ssh 
+  shell: sleep 10 && /sbin/shutdown -r now "Ansible system"
+  async: 1
+  poll: 0
+  become: yes
+  ignore_errors: true  
+  ignore_unreachable: true
+  vars:
+    ansible_user: pi
+    ansible_password: "{{pi_password}}"
+
+- name: Mount img
+  connection: local
+  become: yes
+  shell: "x=$(kpartx -a -v ./*.img | awk '{print $3}'); echo $x  | cut -d' ' -f1 |rev| cut -c3- | rev"
+  register: partx_result
+
+- debug:
+   var: partx_result
+
+- name: Mount up boot
+  connection: local
+  become: yes
+  mount:
+    src: "/dev/mapper/{{partx_result.stdout}}p1"
+    path: "./bootmnt"
+    state: mounted
+    fstype: vfat
+
+- name: Mount up root
+  connection: local
+  become: yes
+  mount:
+    src: "/dev/mapper/{{partx_result.stdout}}p2"
+    path: "./rootmnt"
+    state: mounted
+    fstype: ext4
+
 - name: Clean boot path
+  connection: local
+  become: yes
   delegate_to: localhost
   file:
     state: absent
     path: "{{boot_path}}"
 
 - name: Copy boot into place.
-  delegate_to: localhost
-  shell: cp -a "./bootmnt/" "{{boot_path}}"
+  connection: local
+  become: yes
+  synchronize: 
+    src: "./bootmnt/" 
+    dest: "{{boot_path}}"
+
+- name: UMount up boot
+  connection: local
+  become: yes
+  mount:
+    src: "/dev/mapper/{{partx_result.stdout}}p1"
+    path: "./bootmnt"
+    state: unmounted
+    fstype: vfat 
 
 - name: Clean root path
+  connection: local
+  become: yes
   delegate_to: localhost
   file:
     state: absent
     path: "{{root_path}}"
 
 - name: Copy root into place.
-  delegate_to: localhost
-  shell: cp -a "./rootmnt/" "{{root_path}}"
+  connection: local
+  become: yes
+  synchronize: 
+    src: "./rootmnt/" 
+    dest: "{{root_path}}"
+
+- name: UMount up root
+  connection: local
+  become: yes
+  mount:
+    src: "/dev/mapper/{{partx_result.stdout}}p2"
+    path: "./rootmnt"
+    state: unmounted
+    fstype: ext4 
 
 - name: Disable Bluetooth and WiFi
+  connection: local
   become: yes
   delegate_to: localhost
   lineinfile:
@@ -32,13 +100,16 @@
   - dtoverlay=disable-bt
 
 - name: Cleanup boot configuration
+  connection: local
   delegate_to: localhost
+  become: yes
   lineinfile:
     path: "{{boot_path}}/cmdline.txt"
     regexp: "UUID=\\d"
     state: absent
 
 - name: Boot configuration
+  connection: local
   become: yes
   delegate_to: localhost
   lineinfile:
@@ -51,6 +122,8 @@
   - "console=serial0,115200 console=tty1 root=/dev/nfs nfsroot={{pxe_host}}:{{root_path}},vers=4.1,proto=tcp rw ip=dhcp rootwait elevator=deadline"
 
 - name: Cleanup fstab
+  connection: local
+  become: yes
   delegate_to: localhost
   lineinfile:
     path: "{{root_path}}/etc/fstab"
@@ -58,6 +131,7 @@
     state: absent
 
 - name: fstab configuration
+  connection: local
   become: yes
   delegate_to: localhost
   lineinfile:
@@ -70,6 +144,7 @@
   - "{{pxe_host}}:{{boot_path}} /boot nfs defaults,vers=4.1,proto=tcp 0 0"
 
 - name: exports configuration
+  connection: local
   become: yes
   delegate_to: localhost
   lineinfile:
@@ -83,6 +158,8 @@
   - "{{boot_path}} *(rw,sync,no_subtree_check,no_root_squash)"
 
 - name: Restart services
+  connection: local
+  become: yes
   delegate_to: localhost
   systemd:
     name: "{{item}}"
@@ -92,16 +169,33 @@
     - tftpd-hpa
   
 - name: Reload systemd
+  connection: local
+  become: yes
   delegate_to: localhost
   command: systemctl daemon-reload
 
 - name: Check if ssh exists
+  connection: local
   stat: path="{{boot_path}}/ssh"
   register: ssh
 
 - name: Enable ssh
+  connection: local
+  become: yes
   delegate_to: localhost
   file: 
     path: "{{boot_path}}/ssh"
     state: touch
   when: ssh.stat.exists == false
+  
+- name: Restart server
+  connection: ssh 
+  shell: sleep 2 && /sbin/shutdown -r now "Ansible system"
+  async: 1
+  poll: 0
+  become: yes
+  ignore_errors: true  
+  ignore_unreachable: true
+  vars:
+    ansible_user: ubuntu
+    ansible_password: "{{ubuntu_password}}"

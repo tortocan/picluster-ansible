@@ -1,58 +1,17 @@
-- name: Check if TFTP boot path exists
-  delegate_to: localhost
-  stat: path={{boot_path}}
-  register: bootpath
-
-- name: Move/Enable TFTP boot path
-  delegate_to: localhost
-  shell: mv "{{boot_path}}-disable" "{{boot_path}}"
-  when: bootpath.stat.exists == false
-
-- name: Enable NFS and TFTP exports
-  become: yes
-  delegate_to: localhost
-  lineinfile:
-    path: "/etc/exports"
-    line: "{{item}}"
-    regex: "{{item}}"
-    state: present
-  register: _exports
-  with_items:
-    - "{{boot_path}} *(rw,sync,no_subtree_check,no_root_squash)"
-    - "{{root_path}} *(rw,sync,no_subtree_check,no_root_squash)"
-
-- name: Restart services
-  delegate_to: localhost
-  systemd:
-    name: "{{item}}"
-    state: "restarted"
-  with_items:
-    - nfs-server
-    - tftpd-hpa
-  when: _exports.changed
-
-- name: Reload systemd
-  delegate_to: localhost
-  command: systemctl daemon-reload
-  # when: _exports.changed
-
-- set_fact: wait_host="{{ ansible_host }}"
-- name: Waiting 60 secs for server to come back
-  local_action: wait_for host={{wait_host}} port=22 delay=20 connect_timeout=200
-  become: false
-  delegate_to: localhost
-  delegate_facts: true
-
 - name: Update and upgrade apt packages
   delegate_to: localhost
+  connection: local
+  become: yes
   run_once: true
   apt:
-    upgrade: yes
+    upgrade: "yes"
     update_cache: yes
     cache_valid_time: 86400
 
 - name: Install packages
   delegate_to: localhost
+  connection: local
+  become: yes
   run_once: true
   apt:
     name: "{{ packages }}"
@@ -60,10 +19,12 @@
     update_cache: yes
   vars:
     packages:
-    - sshpass 
+    - sshpass
 
 - name: check .ssh local directory exists
   delegate_to: localhost
+  connection: local
+  become: false
   run_once: true
   stat:
     path: "~/.ssh"
@@ -71,6 +32,8 @@
 
 - name: Check needed OS tools exist
   delegate_to: localhost
+  connection: local
+  become: false
   run_once: true
   shell: which sshpass ssh-keygen ssh-copy-id
   register: os_tools_exist
@@ -84,6 +47,8 @@
 
 - name: create ~/.ssh local directory
   delegate_to: localhost
+  connection: local
+  become: false
   run_once: true
   file:
     path: "~/.ssh"
@@ -94,6 +59,8 @@
 
 - name: check .ssh key file exists
   delegate_to: localhost
+  connection: local
+  become: false
   run_once: true
   stat:
     path: "~/.ssh/{{item}}"
@@ -104,14 +71,18 @@
 
 - name: generate ssh key on local machine
   delegate_to: localhost
+  connection: local
+  become: false
   run_once: true
-  shell: "ssh-keygen -t rsa -f ~/.ssh/id_rsa -P \"\""
+  shell: "ssh-keygen -t rsa -f /home/{{ansible_user}}/.ssh/id_rsa -P ''"
   register: ssh_key_creation
   failed_when: ssh_key_creation.rc != 0
   when: ssh_key_file_exists_check is defined and ssh_key_file_exists_check.results[0].stat.exists == false and ssh_key_file_exists_check.results[1].stat.exists == false
 
 - name: check .ssh/config file exists
   delegate_to: localhost
+  connection: local
+  become: false
   run_once: true
   stat:
     path: "~/.ssh/config"
@@ -119,6 +90,8 @@
 
 - name: create the ~/.ssh/config file
   delegate_to: localhost
+  connection: local
+  become: false
   run_once: true
   file:
     path: "~/.ssh/config"
@@ -129,6 +102,8 @@
 
 - name: add the new ssh key to the ~/.ssh/config file
   delegate_to: localhost
+  connection: local
+  become: false
   run_once: true
   lineinfile:
     path: "~/.ssh/config"
@@ -138,13 +113,70 @@
   register: ssh_config_file_key_addition
   when: ssh_key_file_exists_check is defined and ssh_key_file_exists_check.results[0].stat.exists == false and ssh_key_file_exists_check.results[1].stat.exists == false
 
-- name: Cleanup ssh hosts
+- name: Cleanup keygen
+  ignore_errors: true
+  become: false
   delegate_to: localhost
-  run_once: true
-  shell: echo "" > ~/.ssh/known_hosts
+  connection: local
+  shell: ssh-keygen -f "/home/{{ansible_user}}/.ssh/known_hosts" -R "{{ansible_host}}"
 
+- name: Remove Known hosts old
+  delegate_to: localhost
+  become: false
+  connection: local
+  file:
+     path: "/home/{{ansible_user}}/.ssh/known_hosts.old"
+     state: absent
+
+- name: Waiting for ssh
+  local_action: wait_for host={{ ansible_host }} port=22 delay=2 connect_timeout=2
+  become: false
+  delegate_to: localhost
+  delegate_facts: true
+  register: ssh_con
+  
+- debug:
+    var: ssh_con
+
+- name: Known host
+  delegate_to: localhost
+  become: false
+  connection: local
+  shell: ssh-keyscan -H {{ansible_host}} >> /home/{{ansible_user}}/.ssh/known_hosts
+
+- name: Wait
+  pause:
+    seconds: 30
+    
 - name: Distribute the ssh key to the remote hosts
   delegate_to: localhost
-  shell: "ssh-copy-id -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa.pub {{remote_user}}@{{ ansible_host }} -f"
+  become: false
+  ignore_errors: true
+  connection: local
+  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i /home/{{ansible_user}}/.ssh/id_rsa.pub {{ssh_user}}@{{ ansible_host }} -f -o StrictHostKeyChecking=no"
   register: ssh_copy_id_execution
   failed_when: ssh_copy_id_execution.rc != 0
+
+- debug:
+    var: ssh_copy_id_execution
+
+- name: Wait
+  pause:
+    seconds: 30
+  when: ssh_copy_id_execution.failed and ssh_copy_id_execution.stderr_lines[1] ==  "Permission denied, please try again."
+
+- name: Retry Distribute the ssh key to the remote hosts
+  delegate_to: localhost
+  become: false
+  ignore_errors: true
+  connection: local
+  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i /home/{{ansible_user}}/.ssh/id_rsa.pub {{ssh_user}}@{{ ansible_host }} -f -o StrictHostKeyChecking=no"
+  register: ssh_copy_id_execution
+  failed_when: ssh_copy_id_execution.rc != 0
+  when: ssh_copy_id_execution.failed and ssh_copy_id_execution.stderr_lines[1] ==  "Permission denied, please try again."
+
+- debug:
+    var: ssh_copy_id_execution
+
+- name: Ping
+  ping:

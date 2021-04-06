@@ -4,6 +4,7 @@
   register: bootpath
 
 - name: Enable pxe boot
+  become: yes
   delegate_to: localhost
   shell: mv "{{boot_path}}-disable" "{{boot_path}}"
   when: bootpath.stat.exists == true
@@ -17,6 +18,41 @@
   delegate_facts: true
   when: bootpath.stat.exists == true
 
+- name: Fix slow apt update
+  become: yes
+  sysctl:
+    name: "{{item}}"
+    value: 1
+    sysctl_set: yes
+    state: present
+    reload: yes
+  with_items:
+    - net.ipv6.conf.all.disable_ipv6
+    - net.ipv6.conf.default.disable_ipv6
+    - net.ipv6.conf.lo.disable_ipv6
+  register: ip6
+
+- name: Restart service networking
+  become: yes
+  service:
+    name: networking
+    state: restarted
+  when: ip6.changed
+
+- name: Hold apt packages
+  become: yes
+  dpkg_selections:
+    name: "{{item}}"
+    selection: hold
+  with_items:
+    - libraspberrypi-bin 
+    - libraspberrypi-dev 
+    - libraspberrypi-doc 
+    - libraspberrypi0
+    # - raspberrypi-bootloader 
+    - raspberrypi-kernel 
+    - raspberrypi-kernel-headers
+
 - name: 'Update and upgrade apt packages'
   become: yes
   apt:
@@ -25,6 +61,7 @@
     cache_valid_time: 86400
 
 - name: Setup rpi-eeprom-update branch
+  become: yes
   lineinfile:
     path: /etc/default/rpi-eeprom-update
     line: 'FIRMWARE_RELEASE_STATUS="stable"'

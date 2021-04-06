@@ -1,7 +1,9 @@
-- hosts: all
+- hosts: c1-master2
   # strategy: debug
   gather_facts: no
   connection: local
   roles:
     - ssh
-- include: ping.yml
+  vars:
+    ssh_user: ubuntu 
+    ssh_pass: "{{ubuntu_password}}"

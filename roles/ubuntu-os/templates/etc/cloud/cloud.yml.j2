@@ -6,9 +6,7 @@
 # from the distro configuration specified below
 users:
    - default
-   - name: ubuntu
-     lock-password: false
-     plain_text_passwd: "password321"
+    
 # If this is set, 'root' will not be able to ssh in and they
 # will get a message to login instead as the default $user
 disable_root: true
@@ -48,32 +46,21 @@ cloud_config_modules:
 # Emit the cloud config ready event
 # this can be used by upstart jobs for 'start on cloud-config'.
  - emit_upstart
- - snap
  - ssh-import-id
  - locale
  - set-passwords
  - grub-dpkg
  - apt-pipelining
  - apt-configure
- - ubuntu-advantage
  - ntp
  - timezone
- - disable-ec2-metadata
  - runcmd
- - byobu
 
 # The modules that run in the 'final' stage
 cloud_final_modules:
  - package-update-upgrade-install
- - fan
- - landscape
  - lxd
  - ubuntu-drivers
- - puppet
- - chef
- - mcollective
- - salt-minion
- - rightscale_userdata
  - scripts-vendor
  - scripts-per-once
  - scripts-per-boot
@@ -93,7 +80,7 @@ system_info:
    # Default user name + that default users groups (if added/used)
    default_user:
      name: ubuntu
-#     lock_passwd: True
+     lock_passwd: true
      gecos: Ubuntu
      groups: [adm, audio, cdrom, dialout, dip, floppy, lxd, netdev, plugdev, sudo, video]
      sudo: ["ALL=(ALL) NOPASSWD:ALL"]

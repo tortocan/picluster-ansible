@@ -1,10 +1,17 @@
+- name: Renew DHCP
+  become: yes
+  shell: "dhclient -r; dhclient"
+  when: "ansible_host not in ansible_all_ipv4_addresses"
+
 - name: Update and upgrade apt packages
+  become: yes
   apt:
     upgrade: yes
     update_cache: yes
     cache_valid_time: 86400
 
 - name: Install packages
+  become: yes
   apt:
     name: "{{ packages }}"
     state: present
@@ -34,28 +41,8 @@
 
 - name: Unarchive a file that needs to be downloaded
   unarchive:
-    src:  https://downloads.raspberrypi.org/raspbian_lite_latest
+    src:  https://downloads.raspberrypi.org/raspios_lite_armhf_latest
     dest: ./
     remote_src: yes
   when: osimg.matched == 0
 
-- name: Mount img
-  shell: "x=$(kpartx -a -v ./*.img | awk '{print $3}'); echo $x  | cut -d' ' -f1 |rev| cut -c3- | rev"
-  register: partx_result
-
-- debug:
-   var: partx_result
-
-- name: Mount up boot
-  mount:
-    src: "/dev/mapper/{{partx_result.stdout}}p1"
-    path: "./bootmnt"
-    state: mounted
-    fstype: vfat
-
-- name: Mount up root
-  mount:
-    src: "/dev/mapper/{{partx_result.stdout}}p2"
-    path: "./rootmnt"
-    state: mounted
-    fstype: ext4

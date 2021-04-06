@@ -34,7 +34,16 @@ all:
       node_serial: 13693741
       os_disk: /dev/sda
       disk: /dev/sdb
+    router:
+      ansible_host: 10.0.1.1
+    pxe-server:
+       ansible_host: "{{pxe_host}}"
+       delegate_to: localhost
+       node_mac: 80:ce:62:79:70:26
   children:
+    localhost:
+      hosts:
+       pxe-server: {}
     k8s_master:
       hosts:
         c1-master1: {}
@@ -47,10 +56,10 @@ all:
         c1-node2: {}
   vars:
     ansible_python_interpreter: /usr/bin/python3
-    ip_class: 10.0.1.
-    pxe_host: "{{ip_class}}38"
+    ip_class: 10.0.2.
+    subnet: "{{ip_class}}0/24"
+    subnet_name: "LAN"
+    pxe_host: "{{ip_class}}50"
     root_path: "/srv/nfs/rpi4-{{node_serial}}"
     boot_path: "/srv/tftp/{{node_serial}}"
-    pi_eeprom_version: "pieeprom-2020-12-11"
-
-  
+    pi_eeprom_version: "pieeprom-2021-03-18"
