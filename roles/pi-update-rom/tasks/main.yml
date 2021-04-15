@@ -1,22 +1,45 @@
-- name: Check if pxe is disabled
-  delegate_to: localhost
-  stat: path={{boot_path}}-disable
-  register: bootpath
-
-- name: Enable pxe boot
-  become: yes
-  delegate_to: localhost
-  shell: mv "{{boot_path}}-disable" "{{boot_path}}"
-  when: bootpath.stat.exists == true
-
-- set_fact: wait_host="{{ ansible_host }}"
-  when: bootpath.stat.exists == true
-- name: Waiting 60 secs for server to come back
-  local_action: wait_for host={{wait_host}} port=22 delay=20 connect_timeout=200
+- name: Waiting for server to come back
+  local_action: wait_for host={{ ansible_host }} port=22 delay=2 connect_timeout=200
   become: false
   delegate_to: localhost
   delegate_facts: true
-  when: bootpath.stat.exists == true
+
+- name: Setup rapsberry hosts
+  setup:
+    gather_timeout: 3
+  ignore_errors: true
+  ignore_unreachable: true
+  register: setup
+  when: ansible_hostname is not defined
+
+- set_fact: ansible_hostname = setup.ansible_facts['ansible_hostname']
+  when: ansible_hostname is not defined
+    
+- debug:
+    var: ansible_hostname
+
+- name: Include ssh
+  include_role:
+    name: ssh
+  vars:
+    ssh_timeout: 30
+    ssh_user: pi
+    ansible_user: pi
+    ssh_pass: "{{pi_password}}" 
+    ansible_password: "{{pi_password}}"
+  when: setup.unreachable is defined and setup.unreachable and ansible_hostname is not defined
+
+- name: Setup rapsberry hosts
+  setup:
+    gather_timeout: 3
+  ignore_errors: true
+  ignore_unreachable: true
+  register: setup
+  when: ansible_hostname is not defined
+
+- set_fact: ansible_hostname = setup.ansible_facts['ansible_hostname']
+  when: ansible_hostname is not defined
+
 
 - name: Fix slow apt update
   become: yes
@@ -39,19 +62,11 @@
     state: restarted
   when: ip6.changed
 
-- name: Hold apt packages
+- name: Verify update required
   become: yes
-  dpkg_selections:
-    name: "{{item}}"
-    selection: hold
-  with_items:
-    - libraspberrypi-bin 
-    - libraspberrypi-dev 
-    - libraspberrypi-doc 
-    - libraspberrypi0
-    # - raspberrypi-bootloader 
-    - raspberrypi-kernel 
-    - raspberrypi-kernel-headers
+  shell: if rpi-eeprom-update | grep -q 'update required'; then echo 'true'; else echo 'false'; fi
+  register: update
+- set_fact: update_required={{ update.stdout }}
 
 - name: 'Update and upgrade apt packages'
   become: yes
@@ -59,6 +74,15 @@
     upgrade: 'yes'
     update_cache: yes
     cache_valid_time: 86400
+  register: apt_update
+  when: update_required or force_update
+
+- name: Verify update available
+  become: yes
+  shell: if rpi-eeprom-update | grep -q 'update available'; then echo 'true'; else echo 'false'; fi
+  register: update
+  
+- set_fact: update_required={{ update.stdout }}
 
 - name: Setup rpi-eeprom-update branch
   become: yes
@@ -68,12 +92,15 @@
     regex: "FIRMWARE_RELEASE_STATUS="
     state: present
 
+
 - name: Check if ROM exists
   stat: path=/lib/firmware/raspberrypi/bootloader/stable/{{pi_eeprom_version}}.bin
   register: rom
+  when: update_required or force_update
 
 - name: Extract bootconf
   shell: rpi-eeprom-config /lib/firmware/raspberrypi/bootloader/stable/{{pi_eeprom_version}}.bin > ./bootconf.txt
+  when: update_required or force_update
 
 - name: Setup boot configuration
   lineinfile:
@@ -87,6 +114,7 @@
    - "MAX_RESTARTS=1"
    - "SD_BOOT_MAX_RETRIES=1"
    - "NET_BOOT_MAX_RETRIES=1"
+  when: update_required or force_update
 
 - name: Update ROM
   become: yes
@@ -94,6 +122,8 @@
   with_items:
    - "rpi-eeprom-config --out ./{{pi_eeprom_version}}-netboot.bin --config ./bootconf.txt /lib/firmware/raspberrypi/bootloader/stable/{{pi_eeprom_version}}.bin"
    - "rpi-eeprom-update -d -f ./{{pi_eeprom_version}}-netboot.bin"
+  when: update_required or force_update
 
 - name: Include task list in play
   include: reboot-task.yml
+  when: update_required or force_update

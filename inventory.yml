@@ -36,25 +36,27 @@ all:
       disk: /dev/sdb
     router:
       ansible_host: 10.0.1.1
-    pxe-server:
+    pxe_server:
        ansible_host: "{{pxe_host}}"
        delegate_to: localhost
        node_mac: 80:ce:62:79:70:26
   children:
     localhost:
       hosts:
-       pxe-server: {}
-    k8s_master:
+       pxe_server:
+    k8s_masters:
       hosts:
-        c1-master1: {}
-        c1-master2: {}
-        c1-master3: {}
-    k8s_worker:
+        c1-master1: 
+        c1-master2:
+        c1-master3:
+    k8s_workers:
       hosts:
-        c1-node1: {}
-        c1-node3: {}
-        c1-node2: {}
+        c1-node1:
+        c1-node3:
+        c1-node2: 
   vars:
+    clean_root: false
+    clean_boot: false
     ansible_python_interpreter: /usr/bin/python3
     ip_class: 10.0.2.
     subnet: "{{ip_class}}0/24"

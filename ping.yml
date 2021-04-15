@@ -1,8 +1,14 @@
+# - hosts: 
+#     - k8s_workers
+#     - k8s_masters
+#   gather_facts: false
+#   tasks:
+#     - ping:
 
-- hosts: all
+- hosts: 
+    - k8s_masters
   gather_facts: false
-  remote_user: pi
+  user: pi
   tasks:
     - ping:
-
-# raspberry 
+      ignore_errors: true

@@ -1,9 +1,24 @@
-- hosts: c1-master2
+# - hosts: 
+#     - k8s_masters
+#     - k8s_workers
+#   # strategy: debug
+#   gather_facts: no
+#   connection: local
+#   roles:
+#     - ssh
+#   vars:
+#     ssh_user: ubuntu 
+#     ssh_pass: "{{ubuntu_password}}"
+
+- hosts: 
+    # - k8s_masters
+    - c1-node1
   # strategy: debug
   gather_facts: no
   connection: local
   roles:
     - ssh
   vars:
-    ssh_user: ubuntu 
-    ssh_pass: "{{ubuntu_password}}"
+    ssh_user: pi
+    ssh_pass: "{{pi_password}}"
+    

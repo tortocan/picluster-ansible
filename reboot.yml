@@ -1,10 +1,16 @@
-- hosts: all
-  user: pi
-  become: yes
-  become_user: root
-  become_method: sudo
+# - hosts: 
+#     - k8s_workers
+#     - k8s_masters
+#   gather_facts: false
+#   user: ubuntu
+#   tasks:
+#     - name: Include task list in play
+#       include: reboot-task.yml
+
+- hosts: 
+    - k8s_masters
   gather_facts: false
+  user: pi
   tasks:
-   - name: Include task list in play
-     include: reboot-task.yml
-- include: ping.yml
+    - name: Include task list in play
+      include: reboot-task.yml

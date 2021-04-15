@@ -1,42 +1,20 @@
-- hosts: router
-  gather_facts: no
-  become: yes
-  become_method: enable
-  user: admin
-  connection: network_cli
+- hosts: 
+    - c1-node3 
   vars:
-    master_group_name: "k8s_master"
-    worker_group_name: "k8s_worker"
-    ansible_network_os: edgeos
-    ansible_password: "{{ubnt_password}}"
-  roles:
-    - edgeos
+      ansible_user: pi
+  tasks:
+    - name: Verify update required
+      become: yes
+      shell: if rpi-eeprom-update | grep -q 'update required'; then echo 'true'; else echo 'false'; fi
+      register: update
+    
+    - set_fact: 
+        update_required={{ update.stdout }}
+    - debug:
+        var: update
+    - debug:
+        var: update_required
 
-- hosts: localhost
-  strategy: debug
-  connection: local
-  vars:
-    remote_user: pi
-  roles:
-    - pxe-server
-
-- hosts: c1-master2
-  gather_facts: no
-  user: pi
-  vars:
-    ssh_user: pi
-    ssh_pass: "{{pi_password}}"
-  roles:
-    - pxe-client
-    - ssh
-    - pi-update-rom
-    - ubuntu-os
-
-- hosts: c1-master2
-  gather_facts: no
-  user: ubuntu
-  vars:
-   ssh_user: ubuntu
-   ssh_pass: "{{ubuntu_password}}"
-  roles:
-    - ssh
+    - debug:
+        var: update
+      when: update_required

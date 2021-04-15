@@ -1,14 +1,107 @@
+
+- name: Is ssh responding
+  ignore_errors: true
+  ignore_unreachable: true
+  local_action: wait_for host={{ansible_host}} port=22 delay=0 connect_timeout=5 timeout=10
+  become: false
+  delegate_to:  localhost
+  connection: local
+  register: ssh_con
+
+- name: Setup ubuntu hosts
+  setup:
+  ignore_errors: true
+  ignore_unreachable: true
+  register: setup
+  vars:
+    ansible_user: ubuntu
+    ansible_password: "{{ubuntu_password}}"
+  when: ssh_con.failed == false
+
+- set_fact: ansible_hostname = setup.ansible_facts['ansible_hostname']
+  when: setup.ansible_facts['ansible_hostname'] is defined
+    
+- name: Setup rapsberry hosts
+  setup:
+    gather_timeout: 3
+  ignore_errors: true
+  ignore_unreachable: true
+  register: setup
+  when: ansible_hostname is not defined
+
+- set_fact: ansible_hostname = setup.ansible_facts['ansible_hostname']
+  when: ansible_hostname is not defined
+    
+- debug:
+    var: ansible_hostname
+
+- name: Include ssh
+  include_role:
+    name: ssh
+  vars:
+    ssh_timeout: 30
+    ssh_user: "{% if ansible_hostname == 'ubuntu' %}ubuntu{% else %}pi{% endif %}"
+    ansible_user: "{% if ansible_hostname == 'ubuntu' %}ubuntu{% else %}pi{% endif %}"
+    ssh_pass: "{% if ansible_hostname == 'ubuntu' %}ubuntu_password{% else %}pi_password{% endif %}" 
+    ansible_password: "{% if ansible_hostname == 'ubuntu' %}ubuntu_password{% else %}pi_password{% endif %}" 
+  when: setup.unreachable is defined and setup.unreachable and ansible_hostname is defined
+
 - name: Restart server
+  ignore_errors: true
+  ignore_unreachable: true
   connection: ssh 
-  shell: sleep 10 && /sbin/shutdown -r now "Ansible system"
+  shell: sleep 2 && /sbin/shutdown -r now "Ansible system"
   async: 1
   poll: 0
   become: yes
-  ignore_errors: true  
-  ignore_unreachable: true
+  register: restart
   vars:
     ansible_user: pi
     ansible_password: "{{pi_password}}"
+  when: ansible_hostname is defined and ansible_hostname == 'raspberrypi'
+
+- name: Check if pxe is enabled
+  delegate_to: localhost
+  connection: local
+  become: yes
+  stat: path={{boot_path}}/start4.elf
+  register: bootpath
+  when: ansible_hostname is defined and ansible_hostname == 'raspberrypi'
+
+- name: Disable pxe boot to switch to ubuntu
+  delegate_to: localhost
+  connection: local
+  become: yes
+  shell: mv "{{boot_path}}/start4.elf" "{{boot_path}}/start4.elf.disable"
+  when: ansible_hostname is defined and ansible_hostname == 'raspberrypi'
+
+- name: Waiting for server to come back
+  local_action: wait_for host={{ansible_host}} port=22 delay=20 connect_timeout=200
+  become: false
+  delegate_to:  localhost
+  connection: local
+  when: ssh_con.failed == false and restart.skipped is not defined and restart.unreachable is not defined
+
+- name: Setup ubuntu hosts
+  setup:
+  ignore_errors: true
+  ignore_unreachable: true
+  register: setup
+  vars:
+    ansible_user: ubuntu
+    ansible_password: "{{ubuntu_password}}"
+  when: ansible_hostname is defined and ansible_hostname == 'raspberrypi'
+
+- set_fact: ansible_hostname = setup.ansible_facts['ansible_hostname']
+  when: ansible_hostname is defined and ansible_hostname == 'raspberrypi'
+
+- name: Unplug devices and continue
+  connection: local
+  delegate_to: localhost
+  become: false
+  pause:
+    seconds: 300
+  when: ansible_hostname is not defined
 
 - name: Mount img
   connection: local
@@ -20,6 +113,7 @@
    var: partx_result
 
 - name: Mount up boot
+  run_once: true
   connection: local
   become: yes
   mount:
@@ -29,6 +123,7 @@
     fstype: vfat
 
 - name: Mount up root
+  run_once: true
   connection: local
   become: yes
   mount:
@@ -44,6 +139,7 @@
   file:
     state: absent
     path: "{{boot_path}}"
+  when: clean_boot or clean
 
 - name: Copy boot into place.
   connection: local
@@ -53,12 +149,13 @@
     dest: "{{boot_path}}"
 
 - name: UMount up boot
+  run_once: true
   connection: local
   become: yes
   mount:
     src: "/dev/mapper/{{partx_result.stdout}}p1"
     path: "./bootmnt"
-    state: unmounted
+    state: absent
     fstype: vfat 
 
 - name: Clean root path
@@ -68,6 +165,7 @@
   file:
     state: absent
     path: "{{root_path}}"
+  when: clean_root or clean
 
 - name: Copy root into place.
   connection: local
@@ -77,12 +175,13 @@
     dest: "{{root_path}}"
 
 - name: UMount up root
+  run_once: true
   connection: local
   become: yes
   mount:
     src: "/dev/mapper/{{partx_result.stdout}}p2"
     path: "./rootmnt"
-    state: unmounted
+    state: absent
     fstype: ext4 
 
 - name: Disable Bluetooth and WiFi
@@ -143,7 +242,7 @@
   with_items:
   - "{{pxe_host}}:{{boot_path}} /boot nfs defaults,vers=4.1,proto=tcp 0 0"
 
-- name: exports configuration
+- name: Exports configuration
   connection: local
   become: yes
   delegate_to: localhost
@@ -158,6 +257,7 @@
   - "{{boot_path}} *(rw,sync,no_subtree_check,no_root_squash)"
 
 - name: Restart services
+  run_once: true
   connection: local
   become: yes
   delegate_to: localhost
@@ -169,6 +269,7 @@
     - tftpd-hpa
   
 - name: Reload systemd
+  run_once: true
   connection: local
   become: yes
   delegate_to: localhost
@@ -187,15 +288,37 @@
     path: "{{boot_path}}/ssh"
     state: touch
   when: ssh.stat.exists == false
-  
+
+- name: Plug devices and continue
+  connection: local
+  delegate_to: localhost
+  become: false
+  pause:
+    seconds: 300
+  when:  ansible_hostname is not defined
+
 - name: Restart server
+  ignore_errors: true
+  ignore_unreachable: true
   connection: ssh 
   shell: sleep 2 && /sbin/shutdown -r now "Ansible system"
   async: 1
   poll: 0
   become: yes
-  ignore_errors: true  
-  ignore_unreachable: true
+  register: restart
   vars:
     ansible_user: ubuntu
     ansible_password: "{{ubuntu_password}}"
+    ansible_become_pass: "{{ubuntu_password}}"
+  when: ansible_hostname is defined and ansible_hostname == 'ubuntu'
+
+
+- name: Include ssh
+  include_role:
+    name: ssh
+  vars:
+    ssh_user: pi
+    ansible_user: pi
+    ssh_pass: "{{pi_password}}"
+    ansible_password: "{{pi_password}}"
+  when: clean or restart.changed or setup.unreachable is defined and setup.unreachable and ansible_hostname is not defined

@@ -1,0 +1,33 @@
+# - hosts: router
+#   gather_facts: no
+#   become: yes
+#   become_method: enable
+#   user: admin
+#   connection: network_cli
+#   vars:
+#     master_group_name: "k8s_masters"
+#     worker_group_name: "k8s_workers"
+#     ansible_network_os: edgeos
+#     ansible_password: "{{ubnt_password}}"
+#   roles:
+#     - edgeos
+
+# - hosts: localhost
+#   connection: local
+#   roles:
+#     - pxe-server
+
+- hosts: 
+    # - k8s_masters
+    # - k8s_workers
+    - c1-node1
+  gather_facts: no
+  user: pi
+  vars:
+    ssh_user: pi
+    ssh_pass: "{{pi_password}}"
+  roles:
+    - pxe-client
+    - pi-update-rom
+    - ubuntu-os
+

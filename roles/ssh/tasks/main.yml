@@ -74,7 +74,7 @@
   connection: local
   become: false
   run_once: true
-  shell: "ssh-keygen -t rsa -f /home/{{ansible_user}}/.ssh/id_rsa -P ''"
+  shell: "ssh-keygen -t rsa -f /home/{{lookup('env', 'USER')}}/.ssh/id_rsa -P ''"
   register: ssh_key_creation
   failed_when: ssh_key_creation.rc != 0
   when: ssh_key_file_exists_check is defined and ssh_key_file_exists_check.results[0].stat.exists == false and ssh_key_file_exists_check.results[1].stat.exists == false
@@ -113,23 +113,23 @@
   register: ssh_config_file_key_addition
   when: ssh_key_file_exists_check is defined and ssh_key_file_exists_check.results[0].stat.exists == false and ssh_key_file_exists_check.results[1].stat.exists == false
 
-- name: Cleanup keygen
-  ignore_errors: true
-  become: false
-  delegate_to: localhost
-  connection: local
-  shell: ssh-keygen -f "/home/{{ansible_user}}/.ssh/known_hosts" -R "{{ansible_host}}"
+# - name: Cleanup keygen
+#   ignore_errors: true
+#   become: false
+#   delegate_to: localhost
+#   connection: local
+#   shell: ssh-keygen -f "/home/{{lookup('env', 'USER')}}/.ssh/known_hosts" -R "{{ansible_host}}"
 
 - name: Remove Known hosts old
   delegate_to: localhost
   become: false
   connection: local
   file:
-     path: "/home/{{ansible_user}}/.ssh/known_hosts.old"
+     path: "/home/{{lookup('env', 'USER')}}/.ssh/known_hosts.old"
      state: absent
 
 - name: Waiting for ssh
-  local_action: wait_for host={{ ansible_host }} port=22 delay=2 connect_timeout=2
+  local_action: wait_for host={{ ansible_host }} port=22 delay=1 connect_timeout=5 state=present timeout={{ssh_timeout}}
   become: false
   delegate_to: localhost
   delegate_facts: true
@@ -138,22 +138,35 @@
 - debug:
     var: ssh_con
 
+- name: Scan Known host
+  delegate_to: localhost
+  ignore_errors: true
+  become: false
+  connection: local
+  shell: ssh-keyscan -H {{ansible_host}} 
+  register: scan
+
 - name: Known host
   delegate_to: localhost
   become: false
   connection: local
-  shell: ssh-keyscan -H {{ansible_host}} >> /home/{{ansible_user}}/.ssh/known_hosts
+  shell: ssh-keyscan -H {{ansible_host}} >> /home/{{lookup('env', 'USER')}}/.ssh/known_hosts
+  when: scan.rc == 0
 
 - name: Wait
+  connection: local
+  delegate_to: localhost
+  become: false
   pause:
     seconds: 30
-    
+  when: ssh_user == 'ubuntu' and scan.rc == 1
+
 - name: Distribute the ssh key to the remote hosts
   delegate_to: localhost
   become: false
   ignore_errors: true
   connection: local
-  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i /home/{{ansible_user}}/.ssh/id_rsa.pub {{ssh_user}}@{{ ansible_host }} -f -o StrictHostKeyChecking=no"
+  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i /home/{{ lookup('env', 'USER') }}/.ssh/id_rsa.pub {{ssh_user}}@{{ ansible_host }} -f"
   register: ssh_copy_id_execution
   failed_when: ssh_copy_id_execution.rc != 0
 
@@ -161,16 +174,18 @@
     var: ssh_copy_id_execution
 
 - name: Wait
+  connection: local
+  delegate_to: localhost
+  become: false
   pause:
     seconds: 30
-  when: ssh_copy_id_execution.failed and ssh_copy_id_execution.stderr_lines[1] ==  "Permission denied, please try again."
+  when: ssh_copy_id_execution.failed and (ssh_copy_id_execution.stderr_lines|length>0) and ssh_copy_id_execution.stderr_lines[1] ==  "Permission denied, please try again."
 
 - name: Retry Distribute the ssh key to the remote hosts
   delegate_to: localhost
   become: false
-  ignore_errors: true
   connection: local
-  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i /home/{{ansible_user}}/.ssh/id_rsa.pub {{ssh_user}}@{{ ansible_host }} -f -o StrictHostKeyChecking=no"
+  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i /home/{{lookup('env', 'USER')}}/.ssh/id_rsa.pub {{ssh_user}}@{{ ansible_host }} -f"
   register: ssh_copy_id_execution
   failed_when: ssh_copy_id_execution.rc != 0
   when: ssh_copy_id_execution.failed and ssh_copy_id_execution.stderr_lines[1] ==  "Permission denied, please try again."
