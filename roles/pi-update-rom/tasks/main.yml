@@ -1,47 +1,44 @@
-- name: Waiting for server to come back
-  local_action: wait_for host={{ ansible_host }} port=22 delay=2 connect_timeout=200
-  become: false
-  delegate_to: localhost
-  delegate_facts: true
+- name: Include ssh
+  include_role:
+    name: ssh
 
-- name: Setup rapsberry hosts
-  setup:
-    gather_timeout: 3
-  ignore_errors: true
-  ignore_unreachable: true
-  register: setup
-  when: ansible_hostname is not defined
-
-- set_fact: ansible_hostname = setup.ansible_facts['ansible_hostname']
-  when: ansible_hostname is not defined
+- name: Check if ubuntu is enabled
+  vars:
+    ansible_user: ubuntu
+  become: yes
+  stat: path=/boot/firmware/start4.elf
+  register: bootpath
+  when: ansible_distribution is defined and ansible_distribution == 'Ubuntu'
     
 - debug:
-    var: ansible_hostname
+    var: bootpath
+- name: Disable usb boot to switch to raspberry
+  vars:
+    ansible_user: ubuntu
+  become: yes
+  shell: mv "/boot/firmware/{{item}}" "/boot/firmware/{{item}}.disable"
+  when: bootpath.skipped is not defined and bootpath.stat.exists
+  with_items:
+    - "start4.elf"
+    - "start.elf"
+
+- name: Restart ubuntu server 
+  shell: sleep 2 && /sbin/shutdown -r now "Ansible system"
+  async: 1
+  poll: 0
+  become: yes
+  register: restart
+  vars:
+    ansible_user: ubuntu
+  when: ansible_distribution is defined and ansible_distribution == 'Ubuntu'
 
 - name: Include ssh
   include_role:
     name: ssh
-  vars:
-    ssh_timeout: 30
-    ssh_user: pi
-    ansible_user: pi
-    ssh_pass: "{{pi_password}}" 
-    ansible_password: "{{pi_password}}"
-  when: setup.unreachable is defined and setup.unreachable and ansible_hostname is not defined
-
-- name: Setup rapsberry hosts
-  setup:
-    gather_timeout: 3
-  ignore_errors: true
-  ignore_unreachable: true
-  register: setup
-  when: ansible_hostname is not defined
-
-- set_fact: ansible_hostname = setup.ansible_facts['ansible_hostname']
-  when: ansible_hostname is not defined
-
 
 - name: Fix slow apt update
+  vars:
+    ansible_user: pi
   become: yes
   sysctl:
     name: "{{item}}"
@@ -56,6 +53,8 @@
   register: ip6
 
 - name: Restart service networking
+  vars:
+    ansible_user: pi
   become: yes
   service:
     name: networking
@@ -63,12 +62,16 @@
   when: ip6.changed
 
 - name: Verify update required
+  vars:
+    ansible_user: pi
   become: yes
   shell: if rpi-eeprom-update | grep -q 'update required'; then echo 'true'; else echo 'false'; fi
   register: update
 - set_fact: update_required={{ update.stdout }}
 
 - name: 'Update and upgrade apt packages'
+  vars:
+    ansible_user: pi
   become: yes
   apt:
     upgrade: 'yes'
@@ -78,6 +81,8 @@
   when: update_required or force_update
 
 - name: Verify update available
+  vars:
+    ansible_user: pi
   become: yes
   shell: if rpi-eeprom-update | grep -q 'update available'; then echo 'true'; else echo 'false'; fi
   register: update
@@ -85,24 +90,24 @@
 - set_fact: update_required={{ update.stdout }}
 
 - name: Setup rpi-eeprom-update branch
+  vars:
+    ansible_user: pi
   become: yes
   lineinfile:
     path: /etc/default/rpi-eeprom-update
-    line: 'FIRMWARE_RELEASE_STATUS="stable"'
+    line: 'FIRMWARE_RELEASE_STATUS="latest"'
     regex: "FIRMWARE_RELEASE_STATUS="
     state: present
 
-
-- name: Check if ROM exists
-  stat: path=/lib/firmware/raspberrypi/bootloader/stable/{{pi_eeprom_version}}.bin
-  register: rom
-  when: update_required or force_update
-
 - name: Extract bootconf
-  shell: rpi-eeprom-config /lib/firmware/raspberrypi/bootloader/stable/{{pi_eeprom_version}}.bin > ./bootconf.txt
-  when: update_required or force_update
+  vars:
+    ansible_user: pi
+  become: yes
+  shell: rpi-eeprom-config > ./bootconf.txt
 
 - name: Setup boot configuration
+  vars:
+    ansible_user: pi
   lineinfile:
     path: "./bootconf.txt"
     line: "{{item}}"
@@ -110,20 +115,29 @@
     state: present
   register: bootconf
   with_items:
-   - "BOOT_ORDER=0xf421"
+   - "BOOT_ORDER={{boot_order}}"
    - "MAX_RESTARTS=1"
    - "SD_BOOT_MAX_RETRIES=1"
    - "NET_BOOT_MAX_RETRIES=1"
-  when: update_required or force_update
-
+  
 - name: Update ROM
+  vars:
+    ansible_user: pi
   become: yes
   shell: "{{item}}"
   with_items:
-   - "rpi-eeprom-config --out ./{{pi_eeprom_version}}-netboot.bin --config ./bootconf.txt /lib/firmware/raspberrypi/bootloader/stable/{{pi_eeprom_version}}.bin"
-   - "rpi-eeprom-update -d -f ./{{pi_eeprom_version}}-netboot.bin"
-  when: update_required or force_update
+   - "rpi-eeprom-config --apply ./bootconf.txt"
+  when: >
+    update_required 
+    or force_update 
+    or bootconf.changed
 
 - name: Include task list in play
+  vars:
+    ansible_user: pi
   include: reboot-task.yml
-  when: update_required or force_update
+  when: > 
+    update_required 
+    or force_update 
+    or bootconf.changed
+

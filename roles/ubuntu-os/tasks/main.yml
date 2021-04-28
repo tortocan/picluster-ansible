@@ -15,29 +15,40 @@
     dest: ./
   when: img.stat.exists == false
 
-- name: Format disk
+- name: UMount up root
   become: yes
-  shell: "dd if=/dev/zero of={{os_disk}} bs=1M count=2"
+  ignore_errors: true
+  shell: umount "{{item}}"
+  with_items:
+    - "{{os_disk}}1"
+    - "{{os_disk}}2" 
+  failed_when: umount.stderr_lines is defined and umount.stderr_lines[0].find("not mounted.")
+
+- name: Wipefs
+  become: yes
+  shell: "wipefs -a {{os_disk}}"
+  when: clean
 
 - name: Extract and write to disk
   become: yes
-  shell: xzcat ./ubuntu-20.10-preinstalled-server-arm64+raspi.img.xz | dd bs=4M of={{os_disk}} conv=fsync status=progress
+  shell: xzcat ./ubuntu-20.10-preinstalled-server-arm64+raspi.img.xz | dd bs=64k of={{os_disk}} iflag=fullblock oflag=direct
+
+- name: Creates directory
+  become: yes
+  file:
+    path: "{{item}}"
+    state: directory
+  with_items:
+    - "./rootmnt"
+    - "./bootmnt"
 
 - name: Mount up root
   become: yes
-  mount:
-    src: "{{os_disk}}2"
-    path: "./rootmnt"
-    state: mounted
-    fstype: ext4
-
+  shell: mount "{{os_disk}}2" "./rootmnt"
+ 
 - name: Mount up boot
   become: yes
-  mount:
-    src: "{{os_disk}}1"
-    path: "./bootmnt"
-    state: mounted
-    fstype: vfat
+  shell: mount "{{os_disk}}1" "./bootmnt"
 
 - name: Expire user password
   become: yes
@@ -59,22 +70,6 @@
   - dtoverlay=disable-wifi
   - dtoverlay=disable-bt
 
-- name: UMount up root
-  become: yes
-  mount:
-    src: "{{os_disk}}2"
-    path: "./rootmnt"
-    state: absent
-    fstype: ext4
-
-- name: UMount up boot
-  become: yes
-  mount:
-    src: "{{os_disk}}1"
-    path: "./bootmnt"
-    state: absent
-    fstype: vfat
-
 - name: Restart server
   ignore_errors: true
   ignore_unreachable: true
@@ -87,37 +82,13 @@
     ansible_user: pi
     ansible_password: "{{pi_password}}"
   register: restart
-  
-- name: Check if pxe is enabled
-  delegate_to: localhost
-  connection: local
-  become: yes
-  stat: path={{boot_path}}/start4.elf
-  register: bootpath
-  when: restart.unreachable is not defined
-
-- name: Disable pxe boot
-  delegate_to: localhost
-  connection: local
-  become: yes
-  shell: mv "{{boot_path}}/start4.elf" "{{boot_path}}/start4.elf.disable"
-  when: restart.unreachable is not defined and bootpath.stat.exists  
-
-- name: Wait
-  pause:
-    seconds: 30
-
-- name: Waiting for ssh
-  local_action: wait_for host={{ ansible_host }} port=22 delay=1 connect_timeout=5 state=present timeout=300
-  become: false
-  delegate_to: localhost
-  delegate_facts: true
-  register: ssh_con
 
 - name: Include ssh
   include_role:
     name: ssh
   vars:
+    ssh_delay: 60
+    ssh_timeout: 180
     ssh_user: ubuntu
     ansible_user: ubuntu
     ssh_pass: "{{ubuntu_password}}" 

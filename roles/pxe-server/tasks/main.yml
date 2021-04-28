@@ -23,26 +23,16 @@
     - unzip 
     - tftpd-hpa
 
-- name: Check if version img exists
-  find: 
-    paths: ./
-    patterns: "*raspbian-buster-lite.img"
-  register: findimg
-
-- name: Rename file
-  shell: mv ./*raspbian-buster-lite.img ./raspbianos.img
-  when: findimg.matched > 0
-
-- name: Check if raspbian os img exists
-  find: 
-    paths: ./
-    patterns: raspbianos.img
-  register: osimg
-
-- name: Unarchive a file that needs to be downloaded
-  unarchive:
-    src:  https://downloads.raspberrypi.org/raspios_lite_armhf_latest
-    dest: ./
-    remote_src: yes
-  when: osimg.matched == 0
+- name: Creates directory
+  become: yes
+  file:
+    path: "{{item}}"
+    state: directory
+    owner: nobody
+    group: nogroup
+    mode: 0777
+  with_items:
+    - "/srv/nfs"
+    - "/srv/tftp"
+    
 

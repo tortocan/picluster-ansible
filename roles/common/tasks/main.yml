@@ -13,6 +13,7 @@
   when: snap.stat.exists
 
 - name: Remove "snap" package
+  become: yes
   apt:
     name: snapd
     purge: 'yes'
@@ -22,7 +23,7 @@
 - name: Disable Bluetooth and WiFi
   become: yes
   lineinfile:
-    path: /boot/firmware/usercfg.txt
+    path: /boot/firmware/config.txt
     line: "{{item}}"
     regex: "{{item}}"
     state: present
@@ -31,23 +32,24 @@
   - dtoverlay=disable-wifi
   - dtoverlay=disable-bt
 
-- name: DNS stop systemd-resolved from using port 53
-  lineinfile:
-    path: /etc/systemd/resolved.conf
-    line: "DNSStubListener=no"
-    regex: "#DNSStubListener=yes"
-    state: present
-  register: _systemd_result
+# - name: DNS stop systemd-resolved from using port 53
+#   lineinfile:
+#     path: /etc/systemd/resolved.conf
+#     line: "DNSStubListener=no"
+#     regex: "#DNSStubListener=yes"
+#     state: present
+#   register: _systemd_result
 
-- name: Create a symbolic link
-  become: yes
-  file:
-    force: yes
-    src: /run/systemd/resolve/resolv.conf
-    dest: /etc/resolv.conf
-    state: link
+# - name: Create a symbolic link
+#   become: yes
+#   file:
+#     force: yes
+#     src: /run/systemd/resolve/resolv.conf
+#     dest: /etc/resolv.conf
+#     state: link
 
 - name: Set a hostname
+  become: yes
   hostname:
     name: "{{inventory_hostname}}"
   register: _hostname_result
@@ -60,14 +62,8 @@
     regex: "127.0.0.1 localhost"
     state: present
 
-- name: Reload systemd
-  become: yes
-  systemd:
-    daemon_reload: true
-  when: _systemd_result.changed
-
 - include: reboot-task.yml
-  when: _systemd_result.changed or _user_config.changed or _hostname_result.changed
+  when:   _user_config.changed or _hostname_result.changed
 
 - name: 'Update and upgrade apt packages'
   become: yes
@@ -77,6 +73,7 @@
     cache_valid_time: 86400
 
 - name: Install packages that allow apt to be used over HTTPS
+  become: yes
   apt:
     name: "{{ packages }}"
     state: present

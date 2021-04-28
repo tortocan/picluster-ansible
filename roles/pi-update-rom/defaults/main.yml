@@ -1,1 +1,2 @@
 force_update: false
+boot_order: "0xf124"

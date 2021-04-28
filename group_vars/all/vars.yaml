@@ -28,3 +28,5 @@ ansible_become_pass: !vault |
           6366
 load_balancer_server_ip_tcp: 192.168.0.245
 load_balancer_server_ip_udp: 192.168.0.245
+pi_user: pi
+ubuntu_user: ubuntu
