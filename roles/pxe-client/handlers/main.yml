@@ -1,0 +1,20 @@
+- name: Reload exports
+  run_once: true
+  delegate_to: pxe-server
+  connection: ssh
+  vars:
+    ansible_user: ubuntu
+  become: yes
+  command: exportfs -ra
+  listen: exports_reload
+
+- name: Reload systemd
+  run_once: true
+  delegate_to: pxe-server
+  connection: ssh
+  vars:
+    ansible_user: ubuntu
+  become: yes
+  command: systemctl daemon-reload
+  listen: systemd_reload
+

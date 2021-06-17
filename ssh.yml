@@ -1,9 +1,12 @@
 - hosts: 
     - k8s_workers
     - k8s_masters
+    - control_plane
   # strategy: debug
   gather_facts: no
   roles:
     - ssh
   vars:
     ssh_delay: 0
+    # ssh_user: ubuntu
+    # ssh_pass: "{{ubuntu_password}}"

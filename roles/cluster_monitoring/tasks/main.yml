@@ -1,7 +1,7 @@
 ---
 
 - debug:
-    var: "{{ groups['k8s_master'] }}"
+    var: "{{ groups['k8s_masters'] }}"
 
 - name: Check if cluster-monitoring repo already exists.
   stat:

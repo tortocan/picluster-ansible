@@ -10,42 +10,52 @@
     ansible_network_os: edgeos
     ansible_password: "{{ubnt_password}}"
   roles:
-    - edgeos
+    - role: edgeos
+      tags: edgeos, router
 
 - hosts: control_plane
   gather_facts: no
   vars:
     ansible_user: pi
     ansible_password: "{{pi_password}}"
-    disable_pxe: false
     boot_order: "0xf14"
     force_update: false
+    pi_update_rom_has_pxe: false
   roles:
-    - pi-update-rom
-    - ubuntu-os
+    - role: pi-update-rom
+      tags: control-plane, pi-update-rom , os
+    - role: ubuntu-os
+      tags: control-plane, ubuntu-os, os
 
 - hosts: control_plane
   vars:
     ansible_user: ubuntu
     ansible_password: "{{ubuntu_password}}"
-    disable_pxe: false
+    pi_update_rom_has_pxe: false
   roles:
-    - common
-    - pxe-server
+    - role: common
+      tags: control-plane, common, os
+    - role: pxe-server
+      tags: control-plane, pxe-server, os
 
 - hosts: 
     - k8s_masters
     - k8s_workers
   gather_facts: no
-  user: pi
   vars:
-    ssh_user: pi
-    ssh_pass: "{{pi_password}}"
     clean: false
     force_update: false
   roles:
-    - pxe-client
-    - pi-update-rom
-    - ubuntu-os
-    - common
+    - role: pxe-client
+      tags: pxe-client, raspios, os
+    - role: pi-update-rom
+      tags: pi-update-rom, rapsios, os 
+    - role: ubuntu-os
+      tags: ubuntu-os, os
+    - role: common
+      tags: common, os
+    - role: docker
+      tags: docker
+    # - role: k8s
+    #   tags: k8s
 

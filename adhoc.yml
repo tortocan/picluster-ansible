@@ -1,20 +1,8 @@
 - hosts: 
-    - c1-node3 
+    - c1-master2
+  gather_facts: no
+  roles:
+    - adhoc
   vars:
-      ansible_user: pi
-  tasks:
-    - name: Verify update required
-      become: yes
-      shell: if rpi-eeprom-update | grep -q 'update required'; then echo 'true'; else echo 'false'; fi
-      register: update
-    
-    - set_fact: 
-        update_required={{ update.stdout }}
-    - debug:
-        var: update
-    - debug:
-        var: update_required
-
-    - debug:
-        var: update
-      when: update_required
+    ansible_user: pi
+ 

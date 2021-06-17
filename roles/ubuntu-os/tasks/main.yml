@@ -1,67 +1,136 @@
 
-- name: Waiting for server to come back
-  local_action: wait_for host={{ ansible_host }} port=22 delay=2 connect_timeout=200
-  become: false
-  delegate_to: localhost
-  delegate_facts: true
+- name: Include distribution switch to RaspiOS
+  vars:
+    distribution: "Debian"
+    distribution_ssh_delay: "{%if  ansible_distribution == ''%}30{%else%}5{%endif%}" 
+    distribution_ssh_timeout: "{%if ansible_distribution == '' %}300{%else%}120{%endif%}"
+    distribution_ssh_delay_initial: 0
+    distribution_ssh_timeout_initial: 10
+    distribution_setup_ssh_ping: true
+    distribution_setup_ssh_after_sshpass_initial: true
+  include_role:
+    name: distribution-switch
 
-- name: Check if archive img exists
-  stat: path=./ubuntu-20.10-preinstalled-server-arm64+raspi.img.xz
-  register: img
-
-- name: Download ubuntu image
-  get_url:
-    url: https://cdimage.ubuntu.com/releases/20.10/release/ubuntu-20.10-preinstalled-server-arm64+raspi.img.xz
-    dest: ./
-  when: img.stat.exists == false
-
-- name: UMount up root
-  become: yes
-  ignore_errors: true
-  shell: umount "{{item}}"
-  with_items:
-    - "{{os_disk}}1"
-    - "{{os_disk}}2" 
-  failed_when: umount.stderr_lines is defined and umount.stderr_lines[0].find("not mounted.")
-
-- name: Wipefs
-  become: yes
-  shell: "wipefs -a {{os_disk}}"
-  when: clean
-
-- name: Extract and write to disk
-  become: yes
-  shell: xzcat ./ubuntu-20.10-preinstalled-server-arm64+raspi.img.xz | dd bs=64k of={{os_disk}} iflag=fullblock oflag=direct
-
-- name: Creates directory
+- set_fact:
+    mount_boot_path: "{%if ansible_distribution == 'Ubuntu'%}/boot/firmware{%else%}/media/{{inventory_hostname}}-sda1{%endif%}"
+    mount_root_path: "{%if ansible_distribution == 'Ubuntu'%}/root{%else%}/media/{{inventory_hostname}}-sda2{%endif%}"
+  
+- name: Creates su directory
   become: yes
   file:
     path: "{{item}}"
     state: directory
   with_items:
-    - "./rootmnt"
-    - "./bootmnt"
+    - "{{mount_boot_path}}"
+    - "{{mount_root_path}}"
+  when: >  
+    clean == false
+    and ssh_con.failed == false 
+    and ansible_distribution is defined 
+    and ansible_distribution == "Debian"  
+    and "/media" in mount_boot_path 
+    and "/media" in mount_root_path 
 
-- name: Mount up root
+- name: Creates directory
+  file:
+    path: "{{item}}"
+    state: directory
+    force: true
+  when: ansible_distribution == "Debian"
+  with_items:
+    - "{{ubuntu_img_folder}}"
+
+- name: Check if archive img exists
+  stat: path="{{ubuntu_img_folder}}/ubuntu-20.10-preinstalled-server-arm64+raspi.img.xz"
+  register: img
+  when: ansible_distribution == "Debian"
+
+- name: Download ubuntu image
+  get_url:
+    url: https://cdimage.ubuntu.com/releases/20.10/release/ubuntu-20.10-preinstalled-server-arm64+raspi.img.xz
+    dest: "{{ubuntu_img_folder}}"
+  when: img.skipped is not defined and img.stat.exists == false
+
+- name: Extract and write to disk
   become: yes
-  shell: mount "{{os_disk}}2" "./rootmnt"
+  shell: xzcat {{ubuntu_img_folder}}/ubuntu-20.10-preinstalled-server-arm64+raspi.img.xz | dd bs=64k of={{os_disk}} iflag=fullblock oflag=direct
+  when: ansible_distribution is not defined or clean
+
+- name: Check if os_disk exists
+  stat: 
+    path: "{{os_disk}}"
+  register: os_disk_result
+  when: > 
+    ssh_con.failed == false 
+    and ansible_distribution == 'Debian'
+- debug:
+    var: os_disk_result.changed, bootconfig_order.changed, bootconf_extract.changed
+    
+- name: Mount up ubuntu disk boot partition
+  become: yes
+  shell: mount "{{os_disk}}1" "{{mount_boot_path}}"
+  register: mount
+  when: >
+    "/media" in mount_boot_path 
+  failed_when: >
+    mount.rc != 0 
+    and 'already mounted on' not in mount.stderr
+    or 'not mounted.' in mount.stderr
+  changed_when: >
+    mount.rc == 0  
+    
+- name: Mount up ubuntu disk root partition
+  become: yes
+  shell: mount "{{os_disk}}2" "{{mount_root_path}}"
+  register: mount2
+  when: >
+    "/media" in mount_root_path 
+  failed_when: >
+    mount2.rc != 0 
+    and 'already mounted on' not in mount2.stderr
+    or 'not mounted.' in mount2.stderr
+  changed_when: >
+    mount2.rc == 0  
+
+- name: Netplan 99
+  become: yes
+  lineinfile:
+    path: "{{mount_root_path}}/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg"
+    line: "{{item}}"
+    regex: "{{item}}"
+    state: present
+    create: yes
+  with_items:
+    - "network: {config: disabled}"
+
+- name: Netplan 50
+  become: yes
+  lineinfile:
+    path: "{{mount_root_path}}/etc/netplan/50-cloud-init.yaml"
+    line: "              driver: bcmgenet"
+    regex: "              driver: bcmgenet smsc95xx lan78xx"
+    state: present
  
-- name: Mount up boot
-  become: yes
-  shell: mount "{{os_disk}}1" "./bootmnt"
-
 - name: Expire user password
   become: yes
   lineinfile:
-    path: ./bootmnt/user-data
+    path: "{{mount_boot_path}}/user-data"
     line: "  expire: false"
     regex: "  expire: true"
+    state: present
+
+- name: Set user-data hostname
+  become: yes
+  lineinfile:
+    path: "{{mount_boot_path}}/user-data"
+    line: "hostname: {{inventory_hostname}}"
+    regex: "hostname"
     state: present
 
 - name: Disable Bluetooth and WiFi
   become: yes
   lineinfile:
-    path: "./bootmnt/config.txt"
+    path: "{{mount_boot_path}}/config.txt"
     line: "{{item}}"
     regex: "{{item}}"
     state: present
@@ -70,26 +139,17 @@
   - dtoverlay=disable-wifi
   - dtoverlay=disable-bt
 
-- name: Restart server
-  ignore_errors: true
-  ignore_unreachable: true
-  connection: ssh 
-  shell: sleep 0 && /sbin/shutdown -r now "Ansible system"
-  async: 1
-  poll: 0
-  become: yes
+- name: Include distribution switch to Ubuntu
   vars:
-    ansible_user: pi
-    ansible_password: "{{pi_password}}"
-  register: restart
-
-- name: Include ssh
+    distribution: "Ubuntu"
+    clean: true
+    skip_ubuntu_clean: true
+    distribution_ssh_delay: "{%if  ansible_distribution == ''%}30{%else%}5{%endif%}" 
+    distribution_ssh_timeout: "{%if ansible_distribution == '' %}300{%else%}90{%endif%}"
+    distribution_ssh_delay_initial: "{%if  ansible_distribution == ''%}30{%else%}5{%endif%}" 
+    distribution_ssh_timeout_initial: "{%if ansible_distribution == '' %}300{%else%}60{%endif%}"
+    distribution_setup_ssh_ping: true
+    distribution_setup_ssh_after_sshpass_initial: true
+    force_disable_pxe: true
   include_role:
-    name: ssh
-  vars:
-    ssh_delay: 60
-    ssh_timeout: 180
-    ssh_user: ubuntu
-    ansible_user: ubuntu
-    ssh_pass: "{{ubuntu_password}}" 
-    ansible_password: "{{ubuntu_password}}"
+    name: distribution-switch

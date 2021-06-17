@@ -1,1 +1,1 @@
-disable_pxe: true
+ubuntu_img_folder: ./ubuntu-os

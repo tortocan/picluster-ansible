@@ -1,2 +1,3 @@
 force_update: false
 boot_order: "0xf124"
+pi_update_rom_has_pxe: true

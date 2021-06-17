@@ -1,0 +1,12 @@
+- hosts: 
+    - k8s_masters
+    - k8s_workers
+    - control_plane
+  gather_facts: no
+  vars:
+    clean: false
+    force_update: false
+    boot_order: "0xf14"
+    distribution: "Ubuntu"
+  roles:
+    - distribution-switch

@@ -1,31 +1,42 @@
+- set_fact: 
+    current_user: "{{ansible_user}}"
+- debug:
+    var: current_user
+# - pause:
+
 - name: Ensure openshift Python library is installed.
   pip:
     name: openshift
     state: present
   become: true
 
-- name: Check if kube confing exists for {{remote_user}}
-  stat: path=/home/{{remote_user}}/.kube
+- name: Check if kube confing exists for {{current_user}} user
+  stat: 
+    path: "/home/{{current_user}}/.kube"
   register: kube
 
-- name: Initialize the Kubernetes cluster using kubeadm
+- debug:
+    var: kube
+
+- name: Create directory kubeconfig for {{current_user}} user
+  command: "{{ item }}"
+  become: false
+  with_items:
+    - mkdir -p "/home/{{current_user}}/.kube"
+  when: not kube.stat.exists
+
+- name: "Initialize the Kubernetes cluster using kubeadm"
+  become: yes
   run_once: 'yes'
   command: "kubeadm init --apiserver-advertise-address='{{ ansible_host }}' --apiserver-cert-extra-sans='{{ ansible_host }}' --node-name {{ inventory_hostname }}"
   when: not kube.stat.exists
 
-- name: Create directory kubeconfig for {{remote_user}}
-  command: "{{ item }}"
-  become: false
-  with_items:
-    - mkdir -p /home/{{remote_user}}/.kube
-  when: not kube.stat.exists
-
-- name: Setup kubeconfig for {{remote_user}}
+- name: Setup kubeconfig for {{current_user}} user
   command: "{{ item }}"
   become: yes
   with_items:
-    - cp -i /etc/kubernetes/admin.conf /home/{{remote_user}}/.kube/config
-    - chown {{remote_user}}:{{remote_user}} /home/{{remote_user}}/.kube/config
+    - "cp -i /etc/kubernetes/admin.conf /home/{{current_user}}/.kube/config"
+    - "chown {{current_user}}:{{current_user}} /home/{{current_user}}/.kube/config"
   when: not kube.stat.exists
 
 - name: Restart kubelet
@@ -39,7 +50,6 @@
     state: started
     timeout: 60
 
-
 - name: Install pod network
   become: false
   command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
@@ -51,7 +61,11 @@
   register: kubednsaddress
 
 - name: Wait for dns to be ready
-  wait_for: host={{ kubednsaddress.stdout }} port=53 state=started timeout=1800
+  wait_for: 
+    host: "{{ kubednsaddress.stdout }}" 
+    port: 53 
+    state: started 
+    timeout: 1800
 
 - name: Create metal lb namespace.
   become: false

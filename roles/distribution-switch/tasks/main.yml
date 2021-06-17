@@ -1,0 +1,241 @@
+- name: Include ssh initial
+  vars:
+    ssh_ping: "{{distribution_setup_ssh_ping | bool}}"
+    ssh_delay: "{{ distribution_ssh_delay_initial | int}}"
+    ssh_timeout: "{{ distribution_ssh_timeout_initial | int}}"
+    setup_ssh_after_sshpass: "{{distribution_setup_ssh_after_sshpass_initial | bool}}"
+    clean: false
+  include_role:
+    name: ssh
+
+- name: Clean {{inventory_hostname}} ubuntu
+  become: yes
+  shell: "{{item}}"
+  register: clean_ubuntu_result
+  with_items:
+    - "umount {{os_disk}}*"
+    - "wipefs -a {{os_disk}}"
+    - "mkfs.ext4 {{os_disk}}"
+  when: > 
+    ansible_distribution is defined
+    and ansible_distribution == "Debian"
+    and clean
+    and skip_ubuntu_clean == false
+  failed_when: >
+    clean_ubuntu_result.rc != 0 
+    and 'not mounted.' not in clean_ubuntu_result.stderr
+  changed_when: clean_ubuntu_result.rc == 0 
+
+- set_fact:
+    mount_boot_path: "{%if ansible_distribution == 'Ubuntu'%}/boot/firmware{%else%}/media/{{inventory_hostname}}-sda1{%endif%}"
+    mount_root_path: "{%if ansible_distribution == 'Ubuntu'%}/root{%else%}/media/{{inventory_hostname}}-sda2{%endif%}"
+    has_pxe: "{{ groups['control_plane'] is search(inventory_hostname) == false }}"
+
+- name: Creates directory
+  become: yes
+  file:
+    path: "{{item}}"
+    state: directory
+  with_items:
+    - "{{mount_boot_path}}"
+    - "{{mount_root_path}}"
+  when: >  
+    ssh_con.failed == false 
+    and ansible_distribution is defined 
+    and ansible_distribution != "" 
+    and "/media" in mount_boot_path 
+    and "/media" in mount_root_path 
+    
+- name: Extract bootconf
+  vars:
+    ansible_user: pi
+  become: yes
+  shell: rpi-eeprom-config > ./bootconf.txt
+  register: bootconf_extract
+  when: > 
+    ssh_con.failed == false 
+    and ansible_distribution is defined 
+    and ansible_distribution == 'Debian'
+    and ansible_distribution != distribution
+
+- name: Check bootconfig boot order
+  lineinfile:
+    path: ./bootconf.txt
+    line: "BOOT_ORDER={{boot_order}}"
+    state: present
+  check_mode: yes
+  register: bootconfig_order
+  when: > 
+    bootconf_extract.skipped is not defined
+    and bootconf_extract.changed
+
+- name: Check if os_disk1 exists
+  stat: 
+    path: "{{os_disk}}1"
+  register: os_disk1
+  when: > 
+    ssh_con.failed == false 
+    and ansible_distribution is defined 
+    and ansible_distribution == 'Debian'
+
+- set_fact:
+    os_disk1_stat_exists: "{{os_disk1.stat.exists is defined and os_disk1.stat.exists or ansible_distribution == 'Ubuntu'}}"
+- debug:
+    var: os_disk1_stat_exists, os_disk1.changed, bootconfig_order.changed, bootconf_extract.changed
+
+- name: Mount up ubuntu disk boot partition
+  become: yes
+  shell: mount "{{os_disk}}1" "{{mount_boot_path}}"
+  register: mount
+  when: > 
+    os_disk1.skipped is not defined 
+    and os_disk1_stat_exists
+    and "/media" in mount_boot_path 
+    and "/media" in mount_root_path 
+  failed_when: >
+    mount.rc != 0 
+    and 'already mounted on' not in mount.stderr
+    or 'not mounted.' in mount.stderr
+  changed_when: >
+    mount.rc == 0  
+
+- name: Disable pxe 
+  delegate_to: pxe-server
+  vars:
+    ansible_user: ubuntu
+  become: yes
+  shell: mv "{{item}}" "{{item}}.disable"
+  with_items:
+    -  "{{boot_path}}/start.elf"
+    -  "{{boot_path}}/start4.elf"
+  register: disable_pxe
+  when: > 
+    ansible_distribution is defined
+    and ansible_distribution != distribution
+    and distribution == "Ubuntu"
+    and os_disk1_stat_exists
+    and bootconf_extract.skipped is not defined
+    and bootconf_extract.changed
+    and has_pxe
+    or force_disable_pxe
+  failed_when: > 
+    disable_pxe.rc != 0
+    and disable_pxe.stderr.find('No such file or directory') > -1 == false
+    and disable_pxe.changed != has_pxe
+  changed_when: > 
+    disable_pxe.rc == 0
+
+- name: Enable usb boot to switch to ubuntu
+  become: yes
+  shell: mv "{{item}}.disable" "{{item}}"
+  register: switch_to_ubuntu
+  when: > 
+    ssh_con.failed == false
+    and ansible_distribution == "Debian"
+    and distribution == "Ubuntu"
+    or force_enable_ubuntu
+  failed_when: > 
+    switch_to_ubuntu.rc != 0
+    and switch_to_ubuntu.stderr.find('No such file or directory') > -1 == false
+  changed_when: > 
+    switch_to_ubuntu.rc == 0
+  with_items:
+    - "{{mount_boot_path}}/start.elf"
+    - "{{mount_boot_path}}/start4.elf"
+
+- debug:
+    var: disable_pxe.changed, switch_to_ubuntu.changed, has_pxe
+
+- name: Enable pxe 
+  become: yes
+  delegate_to: pxe-server
+  vars:
+    ansible_user: ubuntu
+  shell: mv "{{item}}.disable" "{{item}}"
+  with_items:
+    -  "{{boot_path}}/start.elf"
+    -  "{{boot_path}}/start4.elf"
+  register: pxe_enabled
+  when: > 
+    ansible_distribution != distribution 
+    and ansible_distribution == "Ubuntu"
+    and distribution == "Debian"
+    and has_pxe
+    or ansible_distribution == ""
+    and distribution == "Debian"
+    and force_disable_pxe == false
+    and has_pxe
+    or force_enable_pxe
+  failed_when: > 
+    pxe_enabled.rc != 0
+    and pxe_enabled.stderr.find('No such file or directory') > -1 == false
+    and pxe_enabled.changed != has_pxe
+  changed_when: > 
+    pxe_enabled.rc == 0
+
+- name: Disable usb boot to switch to raspios
+  become: yes
+  shell: mv "{{item}}" "{{item}}.disable"
+  when: > 
+    ssh_con.failed == false
+    and ansible_distribution == "Ubuntu"
+    and distribution == "Debian"
+    or force_disable_ubuntu
+  with_items:
+    - "{{mount_boot_path}}/start.elf"
+    - "{{mount_boot_path}}/start4.elf"
+  register: switch_to_raspios
+  failed_when: > 
+    switch_to_raspios.rc != 0
+    and switch_to_raspios.stderr.find('No such file or directory') > -1 == false
+  changed_when: > 
+    switch_to_raspios.rc == 0
+
+- debug:
+    var: pxe_enabled.changed, switch_to_raspios.changed, os_disk1_stat_exists == (distribution == 'Ubuntu')
+
+- name: Reboot {{inventory_hostname}} device
+  shell: sleep 3 && /sbin/shutdown -r now "Ansible system" || true
+  async: 1
+  poll: 0
+  become: yes
+  when: > 
+    ssh_con.failed == false
+    and ansible_distribution is defined 
+    and ansible_distribution != distribution
+    and os_disk1_stat_exists == (distribution != '')
+    or force_disable_ubuntu
+    or force_enable_pxe
+  register: reboot_device   
+
+- debug:
+    var: current_known_distribution, ansible_distribution, distribution
+
+
+- name: Include ssh on reboot
+  include_role:
+    name: ssh
+  vars:
+    clean: false
+    ssh_delay: "{{ distribution_ssh_delay | int }}"
+    ssh_timeout: "{{ distribution_ssh_timeout | int }}"
+    ssh_ping: "{{distribution_setup_ssh_ping | bool}}"
+    setup_ssh_after_sshpass: "{{distribution_setup_ssh_after_sshpass | bool}}"
+  when: >
+    reboot_device.changed 
+    and ansible_distribution is defined
+    and ansible_distribution != distribution
+    and ansible_distribution != ""
+ 
+- fail:
+    msg: "{{ansible_play_name}} {{ansible_parent_role_names | default()}} asked for distribution {{distribution}} and ansbible distribution is {{ansible_distribution}}"
+  failed_when: > 
+    distribution_setup_ssh_after_sshpass
+    and reboot_device.changed 
+    and ssh_con.failed == false  
+    and ansible_distribution is defined
+    and ansible_distribution != distribution
+    or distribution_setup_ssh_after_sshpass
+    and ssh_con.failed == false
+    and ansible_distribution != distribution
+    and ansible_distribution == ''

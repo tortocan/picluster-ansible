@@ -1,40 +1,16 @@
-- name: Include ssh
+
+- name: Include distribution switch to RaspiOS
+  vars:
+    distribution: "Debian"
+    distribution_ssh_delay: "{%if  ansible_distribution == ''%}30{%else%}5{%endif%}" 
+    distribution_ssh_timeout: "{%if ansible_distribution == '' %}300{%else%}120{%endif%}"
+    distribution_ssh_delay_initial: 0
+    distribution_ssh_timeout_initial: 10
+    distribution_setup_ssh_ping: true
+    distribution_setup_ssh_after_sshpass_initial: true
+    has_pxe: "{{pi_update_rom_has_pxe}}"
   include_role:
-    name: ssh
-
-- name: Check if ubuntu is enabled
-  vars:
-    ansible_user: ubuntu
-  become: yes
-  stat: path=/boot/firmware/start4.elf
-  register: bootpath
-  when: ansible_distribution is defined and ansible_distribution == 'Ubuntu'
-    
-- debug:
-    var: bootpath
-- name: Disable usb boot to switch to raspberry
-  vars:
-    ansible_user: ubuntu
-  become: yes
-  shell: mv "/boot/firmware/{{item}}" "/boot/firmware/{{item}}.disable"
-  when: bootpath.skipped is not defined and bootpath.stat.exists
-  with_items:
-    - "start4.elf"
-    - "start.elf"
-
-- name: Restart ubuntu server 
-  shell: sleep 2 && /sbin/shutdown -r now "Ansible system"
-  async: 1
-  poll: 0
-  become: yes
-  register: restart
-  vars:
-    ansible_user: ubuntu
-  when: ansible_distribution is defined and ansible_distribution == 'Ubuntu'
-
-- name: Include ssh
-  include_role:
-    name: ssh
+    name: distribution-switch
 
 - name: Fix slow apt update
   vars:
@@ -61,13 +37,26 @@
     state: restarted
   when: ip6.changed
 
+- name: Setup rpi-eeprom-update branch
+  vars:
+    ansible_user: pi
+  become: yes
+  lineinfile:
+    path: /etc/default/rpi-eeprom-update
+    line: 'FIRMWARE_RELEASE_STATUS="default"'
+    regex: "FIRMWARE_RELEASE_STATUS="
+    state: present
+
 - name: Verify update required
   vars:
     ansible_user: pi
   become: yes
   shell: if rpi-eeprom-update | grep -q 'update required'; then echo 'true'; else echo 'false'; fi
-  register: update
-- set_fact: update_required={{ update.stdout }}
+  register: update_required_result
+- set_fact: update_required={{ update_required_result.stdout }}
+
+- debug:
+    var: update_required, update
 
 - name: 'Update and upgrade apt packages'
   vars:
@@ -85,19 +74,12 @@
     ansible_user: pi
   become: yes
   shell: if rpi-eeprom-update | grep -q 'update available'; then echo 'true'; else echo 'false'; fi
-  register: update
+  register: update_available_result
   
-- set_fact: update_required={{ update.stdout }}
+- set_fact: update_available={{ update_available_result.stdout }}
 
-- name: Setup rpi-eeprom-update branch
-  vars:
-    ansible_user: pi
-  become: yes
-  lineinfile:
-    path: /etc/default/rpi-eeprom-update
-    line: 'FIRMWARE_RELEASE_STATUS="latest"'
-    regex: "FIRMWARE_RELEASE_STATUS="
-    state: present
+- debug:
+    var: update_available, update
 
 - name: Extract bootconf
   vars:
@@ -111,7 +93,7 @@
   lineinfile:
     path: "./bootconf.txt"
     line: "{{item}}"
-    regex: "{{item}}"
+    regex: "{{item.split('=')[0]}}"
     state: present
   register: bootconf
   with_items:
@@ -128,7 +110,7 @@
   with_items:
    - "rpi-eeprom-config --apply ./bootconf.txt"
   when: >
-    update_required 
+    update_available 
     or force_update 
     or bootconf.changed
 
@@ -137,7 +119,7 @@
     ansible_user: pi
   include: reboot-task.yml
   when: > 
-    update_required 
+    update_available 
     or force_update 
     or bootconf.changed
 

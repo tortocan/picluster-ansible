@@ -1,12 +1,35 @@
 
-- name: Mount up root
-  mount:
-    src: "{{os_disk}}2"
-    path: "./rootmnt"
-    state: mounted
-    fstype: ext4
-
-- name: Configure Cloud Init
-  template:
-    src: "etc/cloud/cloud.yml.j2"
-    dest: "./rootmnt/etc/cloud/cloud.cfg"
+- name: Exports configuration
+  delegate_to: pxe-server
+  connection: ssh
+  vars:
+    ansible_user: ubuntu
+  become: yes
+  lineinfile:
+    path: "/etc/exports"
+    line: "{{item}}"
+    regex: "{{item}}"
+    state: present
+  register: _exports
+  with_items:
+  - "{{root_path}} *(rw,sync,no_subtree_check,no_root_squash)"
+  - "{{boot_path}} *(rw,sync,no_subtree_check,no_root_squash)"   
+  notify:
+    - exports_reload
+- meta: flush_handlers
+- name: Remove Exports configuration
+  delegate_to: pxe-server
+  connection: ssh
+  vars:
+    ansible_user: ubuntu
+  become: yes
+  lineinfile:
+    path: "/etc/exports"
+    line: "{{item}}"
+    state: absent
+  register: _exports
+  with_items:
+  - "{{root_path}} *(rw,sync,no_subtree_check,no_root_squash)"
+  - "{{boot_path}} *(rw,sync,no_subtree_check,no_root_squash)"  
+  notify:
+    - exports_reload

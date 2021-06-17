@@ -1,9 +1,11 @@
 - name: Add an apt signing key for Kubernetes
+  become: yes
   apt_key:
     url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
     state: present
 
 - name: Adding apt repository for Kubernetes
+  become: yes
   apt_repository:
     update_cache: yes
     repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
@@ -28,6 +30,7 @@
   command: "update-alternatives --set iptables /usr/sbin/iptables-legacy"
 
 - name: Install Kubernetes binaries
+  become: yes
   apt:
     name: "{{ packages }}"
     state: present
@@ -39,6 +42,15 @@
       - kubectl
       - kubetail
 
+- name: Include master
+  include_role:
+    name: k8s_masters
+  when: inventory_hostname.find("master")
+
+- name: Include node
+  include_role:
+    name: k8s_node
+  when: inventory_hostname.find("node")
 
 # - name: Configure node ip
 #   lineinfile:

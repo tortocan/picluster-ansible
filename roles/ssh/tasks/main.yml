@@ -1,3 +1,6 @@
+- debug:
+    var: ansible_distribution, ssh_delay, ssh_timeout
+
 - name: Is ssh responding
   ignore_errors: true
   ignore_unreachable: true
@@ -7,78 +10,75 @@
   connection: local
   register: ssh_con
 
-- name: Scan Known host
+- name: SSH key scan known host
   ignore_errors: true
   ignore_unreachable: true
   delegate_to: localhost
   become: false
   connection: local
-  shell: host=$(ssh-keyscan -H {{ansible_host}} 2>&1|head -n 1|awk '{print $4}'|tr -s '-'|cut -d '-' -f 1); echo $host
+  shell:  ssh-keyscan -T5 {{item}}  #host=$(ssh-keyscan -H {{item}} 2>&1|head -n 1|awk '{print $4}'|tr -s '-'|cut -d '-' -f 1); echo $host
   register: scan_known_host
+  with_items:
+    - "{{inventory_hostname}}"
+    - "{{ansible_host}}"
+  when: ssh_con.failed == false
+  changed_when: false
 
-- set_fact: 
-    ssh_user: "{% if scan_known_host.stdout == 'Raspbian'%}{{pi_user}}{% else %}{{ubuntu_user}}{% endif %}"
-  when: scan_known_host.stdout != 'or'
+- set_fact:
+    current_known_distribution: "{% if scan_known_host.results | map(attribute='stderr') is search('Raspbian') %}Debian{% elif scan_known_host.results | map(attribute='stderr') is search('Ubuntu')%}Ubuntu{%else%}{% endif %}"
+    ssh_user: "{% if scan_known_host.results | map(attribute='stderr')  is search('Raspbian') %}{{pi_user}}{% else %}{{ubuntu_user}}{% endif %}"
+  register: set_ssh_user
+  when: ssh_con.failed == false
+
+- name: Clean known hosts
+  delegate_to: localhost
+  become: yes
+  register: clean_ssh_keys
+  lineinfile:
+    name: "/home/{{lookup('env', 'USER')}}/.ssh/known_hosts"
+    regexp: "{{item}}"
+    state: absent
+  when: > 
+    clean
+  with_items: 
+    - "{{ ansible_host }}"
+    - "{{inventory_hostname}}"
+  until: clean_ssh_keys.changed == false
+
+- name: Trust new host
+  delegate_to: localhost
+  become: yes
+  register: add_ssh_keys
+  lineinfile:
+    name: "/home/{{lookup('env', 'USER')}}/.ssh/known_hosts"
+    line: "{{item}}"
+  when: > 
+    current_known_distribution is defined
+    and ssh_con.failed == false
+    and current_known_distribution == distribution
+    and current_known_distribution != ""
+    or clean
+  with_items: "{{ scan_known_host.results | map(attribute='stdout_lines') |default([]) }}"
 
 - set_fact: 
     ssh_pass: "{{vars[ssh_user + '_password']}}"
     ansible_ssh_user: "{{ssh_user}}"
     ansible_ssh_password: ""
     cacheable: no
-  when: scan_known_host.stdout != 'or'
-
-- name: Setup ssh host initial
-  setup:
-    gather_timeout: 3
-  ignore_errors: true
-  ignore_unreachable: true
-  any_errors_fatal: false
-  register: setup
-  when: ssh_con.failed == false
+  when: set_ssh_user.skipped is not defined
 
 - set_fact: 
-    ansible_distribution: "{{setup.ansible_facts['ansible_distribution']}}"
+    ansible_distribution: "{{current_known_distribution}}"
     cacheable: no
-  when: ansible_distribution is not defined   
-- set_fact: 
-    ansible_distribution: ""
-    cacheable: no
-  when: setup.unreachable is defined and setup.unreachable 
+  when: >
+    ansible_distribution is not defined   
+    and clean == false
 
 - debug:
-    var: ansible_distribution, scan_known_host.stdout, ansible_ssh_user, ansible_ssh_password, ansible_user, ssh_user, ssh_pass, ssh_con
+    var: ansible_distribution, current_known_distribution, ansible_ssh_user, ansible_ssh_password, ansible_user, ssh_user, ssh_pass, ssh_con
 - debug:
     var: setup
   when: setup.msg is defined 
-
-- name: Cleanup keygen
-  ignore_errors: true
-  become: false
-  delegate_to: localhost
-  connection: local
-  register: cleanup_keygen
-  shell: ssh-keygen -f "/home/{{lookup('env', 'USER')}}/.ssh/known_hosts" -R "{{ansible_host}}"
-  when: > 
-    scan_known_host.stdout is not defined and setup.unreachable is defined and setup.unreachable 
-    or setup.msg is defined and setup.msg.find('REMOTE HOST IDENTIFICATION HAS CHANGED!') > -1
-    or setup.msg is defined and setup.msg.find('Failed to connect to the host via ssh') > -1
-
-- name: Trust new host
-  delegate_to: localhost
-  become: yes
-  shell: ssh-keyscan -H {{ansible_host}} >> "/home/{{lookup('env', 'USER')}}/.ssh/known_hosts"
-  register: trust_new_host
-  when: cleanup_keygen.changed
-
-- name: Remove Known hosts old
-  delegate_to: localhost
-  become: false
-  connection: local
-  register: remove_old_host
-  file:
-     path: "/home/{{lookup('env', 'USER')}}/.ssh/known_hosts.old"
-     state: absent
-  when: trust_new_host.changed
 
 - name: Update and upgrade apt packages
   delegate_to: localhost
@@ -124,7 +124,8 @@
   register: os_tools_exist
   ignore_errors: true
   when: setup.unreachable is defined and setup.unreachable 
-
+  changed_when: false
+  
 - name: Fail execution if any of the needed OS tools is missing
   run_once: true
   fail:
@@ -201,51 +202,36 @@
   register: ssh_config_file_key_addition
   when: setup.unreachable is defined and setup.unreachable and ssh_key_file_exists_check is defined and ssh_key_file_exists_check.results[0].stat.exists == false and ssh_key_file_exists_check.results[1].stat.exists == false
 
-- name: Waiting for ssh
-  local_action: wait_for host={{ ansible_host }} port=22 delay=1 connect_timeout=5 state=present timeout={{ssh_timeout}}
-  become: false
-  delegate_to: localhost
-  delegate_facts: true
-  when: setup.unreachable is defined and setup.unreachable 
-
 - name: Distribute the ssh key to the remote hosts
   delegate_to: localhost
   become: false
-  ignore_errors: true
   connection: local
-  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i /home/{{ lookup('env', 'USER') }}/.ssh/id_rsa.pub {{ssh_user}}@{{ ansible_host }} -f"
+  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i /home/{{ lookup('env', 'USER') }}/.ssh/id_rsa.pub {{ssh_user}}@{{ item }}"
   register: ssh_copy_id_execution
-  failed_when: ssh_copy_id_execution.rc != 0
-  when: setup.unreachable is defined and setup.unreachable 
-
-- debug:
-    var: ssh_copy_id_execution
-
-- name: Wait for Retry
-  connection: local
-  delegate_to: localhost
-  become: false
-  pause:
-    seconds: 30
-  when: setup.unreachable is defined and setup.unreachable and ssh_copy_id_execution.failed and (ssh_copy_id_execution.stderr_lines|length>0) and ssh_copy_id_execution.stderr_lines[1] ==  "Permission denied, please try again."
-
-- name: Retry Distribute the ssh key to the remote hosts
-  delegate_to: localhost
-  become: false
-  connection: local
-  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i /home/{{lookup('env', 'USER')}}/.ssh/id_rsa.pub {{ssh_user}}@{{ ansible_host }} -f"
-  register: ssh_copy_id_execution
-  failed_when: ssh_copy_id_execution.rc != 0
-  when: setup.unreachable is defined and setup.unreachable and ssh_copy_id_execution.failed and ssh_copy_id_execution.stderr_lines[1] ==  "Permission denied, please try again."
-
-- debug:
-    var: ssh_copy_id_execution
+  failed_when: >
+    'ERROR' in  ssh_copy_id_execution.stderr
+  changed_when: >
+    ssh_copy_id_execution.rc == 0
+    and  "Number of key(s) added: 1" in ssh_copy_id_execution.stdout_lines
+  when: > 
+    current_known_distribution is defined
+    and ssh_con.failed == false
+    and current_known_distribution == distribution
+    and current_known_distribution != ""
+    and add_ssh_keys.changed
+    or current_known_distribution == "" 
+    and ssh_con.failed == false
+    or ansible_distribution == "" 
+    and ssh_con.failed == false
+  with_items:
+    - "{{inventory_hostname}}"
+    # - "{{ansible_host}}"
 
 - name: Ping
   vars: 
     ansible_password: ""
   ping:
-  when: ssh_ping
+  when: ssh_ping and ssh_con.failed == false
 
 - name: Setup ssh hosts after sshpass
   vars:
@@ -255,13 +241,18 @@
   ignore_errors: true
   ignore_unreachable: true
   register: setup
-  when: setup_ssh_after_sshpass
+  when: > 
+    setup_ssh_after_sshpass 
+    and current_known_distribution is defined 
+    and current_known_distribution != ""
 
 - set_fact: 
     ansible_distribution: "{{setup.ansible_facts['ansible_distribution']}}"
+    ansible_ssh_user: "{{ansible_ssh_user | default(setup.ansible_facts['ansible_user_id'])}}"
+    ansible_user: "{{ansible_user | default(setup.ansible_facts['ansible_user_id'])}}"
+    ssh_user: "{{ssh_user | default(setup.ansible_facts['ansible_user_id'])}}"
     cacheable: no
-  failed_when: ansible_distribution is not defined
-  when: setup_ssh_after_sshpass
+  when: setup_ssh_after_sshpass and ssh_con.failed == false
 
 - debug:
-    var: ansible_distribution, scan_known_host.stdout, ansible_ssh_user, ansible_user, ssh_user, ansible_host, ssh_con
+    var: ansible_distribution, current_known_distribution, ansible_ssh_user, ansible_user, ssh_user, ansible_host, ssh_con

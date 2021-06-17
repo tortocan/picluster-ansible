@@ -6,7 +6,7 @@
   tasks:
 
     - name: Delete node
-      delegate_to: "{{ groups['k8s_master'][0] }}"
+      delegate_to: "{{ groups['k8s_masters'][0] }}"
       become: false
       ignore_errors: yes
       command:  kubectl delete node {{inventory_hostname}}

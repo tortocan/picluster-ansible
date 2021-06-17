@@ -13,17 +13,20 @@
 #        - runc
 
 - name: Add an apt signing key for Docker
+  become: yes
   apt_key:
     url: https://download.docker.com/linux/ubuntu/gpg
     state: present
 
 - name: Add apt repository for stable version
+  become: yes
   apt_repository:
     update_cache: yes
     repo: deb [arch=arm64] https://download.docker.com/linux/ubuntu focal stable
     state: present
 
 - name: Install docker and its dependecies
+  become: yes
   apt:
     name: "{{ packages }}"
     state: present
@@ -67,6 +70,7 @@
   register: cgroup_enable_cpuset
 
 - name: 'Enable cgroup_enable=cpuset'
+  become: yes
   command: sed -i '1s/$/ cgroup_enable=cpuset/' /boot/firmware/cmdline.txt
   when: cgroup_enable_cpuset.msg == "line added"
   register: _boot_config
@@ -81,6 +85,7 @@
   register: cgroup_enable_memory
 
 - name: 'Enable cgroup_enable=memory'
+  become: yes
   command: sed -i '1s/$/ cgroup_enable=memory/' /boot/firmware/cmdline.txt
   when: cgroup_enable_memory.msg == "line added"
   register: _boot_config
@@ -96,6 +101,7 @@
   register: cgroup_memory
 
 - name: 'Enable cgroup_memory=1'
+  become: yes
   command: sed -i '1s/$/ cgroup_memory=1/' /boot/firmware/cmdline.txt
   when: cgroup_memory.msg == "line added"
   register: _boot_config
@@ -112,25 +118,14 @@
 
 
 - name: 'Enable swapaccount=1'
+  become: yes
   command: sed -i '1s/$/ swapaccount=1/' /boot/firmware/cmdline.txt
   when: swapaccount.msg == "line added"
   register: _boot_config
 
 
-- name: Disable Bluetooth and WiFi
-  become: yes
-  lineinfile:
-      path: /boot/firmware/usercfg.txt
-      line: "{{item}}"
-      regex: "{{item}}"
-      state: present
-  register: _user_config
-  with_items:
-  - dtoverlay=disable-wifi
-  - dtoverlay=disable-bt
-
-
 - name: Configure Docker daemon options (json)
+  become: yes
   template:
     src: "etc/docker/daemon.json.j2"
     dest: "/etc/docker/daemon.json"
@@ -143,6 +138,7 @@
     - systemd_reload
 
 - name: Add user(s) to "docker" group
+  become: yes
   user:
     name: "{{ item }}"
     groups: "docker"
@@ -150,6 +146,7 @@
   loop: "{{ docker__users }}"
 
 - name: "restart machine"  # noqa 503
+  become: yes
   reboot:
     msg: "Reboot by Ansible, because config changed."
     reboot_timeout: 300   # (= 5 minutes)
