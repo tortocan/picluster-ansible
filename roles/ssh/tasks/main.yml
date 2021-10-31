@@ -35,7 +35,7 @@
   become: yes
   register: clean_ssh_keys
   lineinfile:
-    name: "/home/{{lookup('env', 'USER')}}/.ssh/known_hosts"
+    name: "{{lookup('env', 'HOME')}}/.ssh/known_hosts"
     regexp: "{{item}}"
     state: absent
   when: > 
@@ -50,7 +50,7 @@
   become: yes
   register: add_ssh_keys
   lineinfile:
-    name: "/home/{{lookup('env', 'USER')}}/.ssh/known_hosts"
+    name: "{{lookup('env', 'HOME')}}/.ssh/known_hosts"
     line: "{{item}}"
   when: > 
     current_known_distribution is defined
@@ -111,7 +111,7 @@
   become: false
   run_once: true
   stat:
-    path: "~/.ssh"
+    path: "{{lookup('env', 'HOME')}}/.ssh"
   register: ssh_directory_exists_check
   when: setup.unreachable is defined and setup.unreachable 
   
@@ -138,7 +138,7 @@
   become: false
   run_once: true
   file:
-    path: "~/.ssh"
+    path: "{{lookup('env', 'HOME')}}/.ssh"
     state: directory
     mode: "0700"
   register: ssh_directory_creation
@@ -150,7 +150,7 @@
   become: false
   run_once: true
   stat:
-    path: "~/.ssh/{{item}}"
+    path: "{{lookup('env', 'HOME')}}/.ssh/{{item}}"
   register: ssh_key_file_exists_check
   with_items:
     - "id_rsa"
@@ -162,7 +162,7 @@
   connection: local
   become: false
   run_once: true
-  shell: "ssh-keygen -t rsa -f ~/.ssh/id_rsa -P ''"
+  shell: "ssh-keygen -t rsa -f {{lookup('env', 'HOME')}}/.ssh/id_rsa -P ''"
   register: ssh_key_creation
   failed_when: ssh_key_creation.rc != 0
   when: setup.unreachable is defined 
@@ -177,7 +177,7 @@
   become: false
   run_once: true
   stat:
-    path: "~/.ssh/config"
+    path: "{{lookup('env', 'HOME')}}/.ssh/config"
   register: ssh_config_file_exists_check
   when: setup.unreachable is defined and setup.unreachable 
 
@@ -187,7 +187,7 @@
   become: false
   run_once: true
   file:
-    path: "~/.ssh/config"
+    path: "{{lookup('env', 'HOME')}}/.ssh/config"
     state: touch
     mode: "0644"
   register: ssh_config_file_creation
@@ -199,8 +199,8 @@
   become: false
   run_once: true
   lineinfile:
-    path: "~/.ssh/config"
-    line: "IdentityFile ~/.ssh/id_rsa"
+    path: "{{lookup('env', 'HOME')}}/.ssh/config"
+    line: "IdentityFile {{lookup('env', 'HOME')}}/.ssh/id_rsa"
     state: present
     backup: yes
   register: ssh_config_file_key_addition
@@ -210,7 +210,7 @@
   delegate_to: localhost
   become: false
   connection: local
-  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i ~/.ssh/id_rsa.pub {{ssh_user}}@{{ item }}"
+  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i {{lookup('env', 'HOME')}}/.ssh/id_rsa.pub {{ssh_user}}@{{ item }}"
   register: ssh_copy_id_execution
   failed_when: >
     'ERROR' in  ssh_copy_id_execution.stderr
@@ -230,7 +230,7 @@
     and ssh_con.failed == false
   with_items:
     - "{{inventory_hostname}}"
-    - "{{ansible_host}}"
+    # - "{{ansible_host}}"
 
 - name: Ping
   vars: 
