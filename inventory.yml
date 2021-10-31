@@ -34,7 +34,7 @@ all:
       os_disk: /dev/sda
       disk: /dev/sdb
     router:
-      ansible_host: 10.0.1.1
+      ansible_host: 172.16.0.1
     pxe-server:
        ansible_host: "{{ip_class}}61"
        node_mac: dc:a6:32:f1:02:c2
@@ -60,7 +60,7 @@ all:
     clean_boot: false
     ansible_distribution: ""
     ansible_python_interpreter: /usr/bin/python3
-    ip_class: 10.0.2.
+    ip_class: 172.16.0.
     subnet: "{{ip_class}}0/24"
     subnet_name: "LAN"
     pxe_host: "{{ip_class}}61"
