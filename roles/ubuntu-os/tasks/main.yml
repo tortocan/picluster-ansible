@@ -41,19 +41,19 @@
     - "{{ubuntu_img_folder}}"
 
 - name: Check if archive img exists
-  stat: path="{{ubuntu_img_folder}}/ubuntu-20.10-preinstalled-server-arm64+raspi.img.xz"
+  stat: path="{{ubuntu_img_folder}}/ubuntu-21.10-preinstalled-server-arm64+raspi.img.xz"
   register: img
   when: ansible_distribution == "Debian"
 
 - name: Download ubuntu image
   get_url:
-    url: https://cdimage.ubuntu.com/releases/20.10/release/ubuntu-20.10-preinstalled-server-arm64+raspi.img.xz
+    url: https://cdimage.ubuntu.com/releases/21.10/release/ubuntu-21.10-preinstalled-server-arm64+raspi.img.xz
     dest: "{{ubuntu_img_folder}}"
   when: img.skipped is not defined and img.stat.exists == false
 
 - name: Extract and write to disk
   become: yes
-  shell: xzcat {{ubuntu_img_folder}}/ubuntu-20.10-preinstalled-server-arm64+raspi.img.xz | dd bs=64k of={{os_disk}} iflag=fullblock oflag=direct
+  shell: xzcat {{ubuntu_img_folder}}/ubuntu-21.10-preinstalled-server-arm64+raspi.img.xz | dd bs=64k of={{os_disk}} iflag=fullblock oflag=direct
   when: ansible_distribution is not defined or clean
 
 - name: Check if os_disk exists
