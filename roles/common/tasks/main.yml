@@ -3,22 +3,22 @@
   stat: path=/var/lib/snapd
   register: snap
 
-- name: Remove Snaps
-  become: yes
-  command: "snap remove {{item}}"
-  with_items:
-  - lxd
-  - core18
-  - snapd
-  when: snap.stat.exists
+# - name: Remove Snaps
+#   become: yes
+#   command: "snap remove {{item}}"
+#   with_items:
+#   - lxd
+#   - core18
+#   - snapd
+#   when: snap.stat.exists
 
-- name: Remove "snap" package
-  become: yes
-  apt:
-    name: snapd
-    purge: 'yes'
-    state: absent
-  when: snap.stat.exists
+# - name: Remove "snap" package
+#   become: yes
+#   apt:
+#     name: snapd
+#     purge: 'yes'
+#     state: absent
+#   when: snap.stat.exists
 
 - name: Disable Bluetooth and WiFi
   become: yes
