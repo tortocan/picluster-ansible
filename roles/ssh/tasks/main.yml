@@ -162,10 +162,14 @@
   connection: local
   become: false
   run_once: true
-  shell: "ssh-keygen -t rsa -f /home/{{lookup('env', 'USER')}}/.ssh/id_rsa -P ''"
+  shell: "ssh-keygen -t rsa -f ~/.ssh/id_rsa -P ''"
   register: ssh_key_creation
   failed_when: ssh_key_creation.rc != 0
-  when: setup.unreachable is defined and setup.unreachable and ssh_key_file_exists_check is defined and ssh_key_file_exists_check.results[0].stat.exists == false and ssh_key_file_exists_check.results[1].stat.exists == false
+  when: setup.unreachable is defined 
+    and setup.unreachable
+    and ssh_key_file_exists_check is defined 
+    and ssh_key_file_exists_check.results[0].stat.exists == false
+    and ssh_key_file_exists_check.results[1].stat.exists == false
 
 - name: check .ssh/config file exists
   delegate_to: localhost
@@ -206,10 +210,11 @@
   delegate_to: localhost
   become: false
   connection: local
-  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i /home/{{ lookup('env', 'USER') }}/.ssh/id_rsa.pub {{ssh_user}}@{{ item }}"
+  shell: "sshpass -p {{ssh_pass}} ssh-copy-id -i ~/.ssh/id_rsa.pub {{ssh_user}}@{{ item }}"
   register: ssh_copy_id_execution
   failed_when: >
     'ERROR' in  ssh_copy_id_execution.stderr
+    or 'ERROR' in ssh_copy_id_execution.stdout
   changed_when: >
     ssh_copy_id_execution.rc == 0
     and  "Number of key(s) added: 1" in ssh_copy_id_execution.stdout_lines
@@ -225,7 +230,7 @@
     and ssh_con.failed == false
   with_items:
     - "{{inventory_hostname}}"
-    # - "{{ansible_host}}"
+    - "{{ansible_host}}"
 
 - name: Ping
   vars: 

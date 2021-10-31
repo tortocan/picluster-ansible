@@ -8,6 +8,4 @@ echo 'my_vault_password' > ~/pw
 ansible-vault encrypt_string --name 'pi_password'
 ansible-vault encrypt_string --name 'ubuntu_password'
 ansible-vault encrypt_string --name 'ubnt_password'
-ansible-vault encrypt_string --name 'pi_password'
-ansible-vault encrypt_string --name 'pi_password'
-ansible-vault encrypt_string --name 'pi_password'
+ansible-vault encrypt_string --name 'ansible_become_pass'
