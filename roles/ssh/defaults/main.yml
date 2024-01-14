@@ -2,5 +2,3 @@ ssh_timeout: 300
 ssh_delay: 20
 setup_ssh_after_sshpass: true
 ssh_ping: true
-clean: false
-distribution: ""

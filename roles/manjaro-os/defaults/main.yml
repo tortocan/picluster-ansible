@@ -1,0 +1,9 @@
+manjaro_img_dir: ./images
+manjaro_os_version: "22.12"
+manjaro_os_filename: "Manjaro-ARM-minimal-rpi4-{{manjaro_os_version}}"
+manjaro_os_img: "{{manjaro_os_filename}}.img"
+manjaro_os_archive: "{{manjaro_os_img}}.xz"
+manjaro_os_url: "https://github.com/manjaro-arm/rpi4-images/releases/download/{{manjaro_os_version}}/{{manjaro_os_archive}}"
+clean: false
+mount_boot_path: "/media/{{inventory_hostname}}-sda1"
+mount_root_path: "/media/{{inventory_hostname}}-sda2"

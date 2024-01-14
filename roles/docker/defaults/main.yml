@@ -6,4 +6,4 @@ docker__default_daemon_json: |
 
 docker__daemon_json: ""
 
-docker__users: ["{{ ansible_env.SUDO_USER | d('root') }}", "ubuntu"]
+docker__users: ["{{ ansible_env.SUDO_USER | d('root') }}", "{{ansible_user}}"]

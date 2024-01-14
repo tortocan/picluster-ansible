@@ -1,0 +1,45 @@
+- set_fact:
+    current_user: "{{ansible_user}}"
+- debug:
+    var: current_user
+
+- name: Check if kube confing exists for {{current_user}} user
+  stat:
+    path: "/home/{{current_user}}/.kube"
+  register: kube
+
+- name: Clean up metal lb
+  become: false
+  shell: "{{item}}"
+  register: clean
+  changed_when: "'deleted' in clean.stdout"
+  failed_when: "'error' in clean.stderr "
+  with_items:
+    - kubectl get crds -n metallb-system | xargs -r kubectl delete crds
+    - kubectl get clusterrolebindings -l app=metallb -o=jsonpath='{.items[*].metadata.name}' | xargs -r kubectl delete clusterrolebindings
+    - kubectl get clusterrole -l app=metallb -o=jsonpath='{.items[*].metadata.name}' | xargs -r kubectl delete clusterrole
+    - kubectl get validatingwebhookconfigurations -n metallb-system  -o=jsonpath='{.items[*].metadata.name}' | xargs -r kubectl -n metallb-system delete validatingwebhookconfigurations
+    - kubectl -n metallb-system get configmaps -o=jsonpath='{.items[*].metadata.name}' | xargs -r kubectl -n metallb-system delete configmaps
+    - kubectl -n metallb-system delete all --all
+    - kubectl -n metallb-system get IPAddressPools -o=jsonpath="{.items[*].metadata.name}" | xargs -r kubectl -n metallb-system delete IPAddressPools
+    - kubectl -n metallb-system get BGPPeer -o=jsonpath="{.items[*].metadata.name}" | xargs -r kubectl -n metallb-system delete BGPPeer
+    - kubectl -n metallb-system get BGPAdvertisement -o=jsonpath="{.items[*].metadata.name}" | xargs -r kubectl -n metallb-system delete BGPAdvertisement
+
+
+- name: Install metallb
+  become: false
+  shell: "{{ item }}"
+  register: apply
+  changed_when: "'created' in apply.stdout"
+  failed_when: "'error' in apply.stderr"
+  with_items:
+    - kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.12/config/manifests/metallb-native.yaml
+
+- name: Create k8s yml
+  template:
+    src=k8s.yml
+    dest="./k8s.yml"
+
+- name: Apply k8s yml
+  become: false
+  command: kubectl apply -f ./k8s.yml

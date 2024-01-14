@@ -1,8 +1,134 @@
+- name: Include ssh initial
+  vars:
+    ssh_delay: "0" 
+    ssh_timeout: "20"
+    ssh_ping: true
+    clean: true
+  include_role:
+    name: ssh
+  when: ansible_distribution is not defined 
+    or ansible_distribution is defined 
+    and ansible_distribution == '' 
+
+- debug:
+    var: ansible_lsb['id']
+
+- name: Include yay
+  include_role:
+    name: yay
+  when: ansible_distribution == "Archlinux"
+
+- name: Disable zswap service
+  become: yes
+  service:
+    name: zswap-arm
+    state: stopped
+    enabled: false
+  when: ansible_distribution == "Archlinux"
+
+- name: Disable swap
+  become: yes
+  shell: swapoff -a
+  when: ansible_distribution != "Archlinux"
+
+- name: "Searching for a cgroup_enable_cpuset"
+  lineinfile:
+    path: /boot/cmdline.txt
+    line: "cgroup_enable=cpuset"
+    regex: "cgroup_enable=cpuset"
+    state: present
+  check_mode: yes
+  register: cgroup_enable_cpuset
+
+- name: 'Enable cgroup_enable=cpuset'
+  become: yes
+  command: sed -i '1s/$/ cgroup_enable=cpuset/' /boot/cmdline.txt
+  when: cgroup_enable_cpuset.msg == "line added"
+  register: _boot_config
+
+- name: "Searching for a cgroup_enable_memory"
+  lineinfile:
+    path: /boot/cmdline.txt
+    line: "cgroup_enable=memory"
+    regex: "cgroup_enable=memory"
+    state: present
+  check_mode: yes
+  register: cgroup_enable_memory
+
+- name: 'Enable cgroup_enable=memory'
+  become: yes
+  command: sed -i '1s/$/ cgroup_enable=memory/' /boot/cmdline.txt
+  when: cgroup_enable_memory.msg == "line added"
+  register: _boot_config
+
+- name: "Searching for a cgroup_memory"
+  lineinfile:
+    path: /boot/cmdline.txt
+    line: "cgroup_memory=1"
+    regex: "cgroup_memory=1"
+    state: present
+  check_mode: yes
+  register: cgroup_memory
+
+- name: 'Enable cgroup_memory=1'
+  become: yes
+  command: sed -i '1s/$/ cgroup_memory=1/' /boot/cmdline.txt
+  when: cgroup_memory.msg == "line added"
+  register: _boot_config
+
+- name: "Searching for a swapaccount=1"
+  lineinfile:
+    path: /boot/cmdline.txt
+    line: "swapaccount=1"
+    regex: "swapaccount=1"
+    state: present
+  check_mode: yes
+  register: swapaccount
+
+- name: 'Enable swapaccount=1'
+  become: yes
+  command: sed -i '1s/$/ swapaccount=1/' /boot/cmdline.txt
+  when: swapaccount.msg == "line added"
+  register: _boot_config
+
+- name: Install ebtables Kubernetes
+  become: yes
+  shell: ebtables --version || yes | sudo pacman -S ebtables && echo true
+  changed_when: ebtables_install.stdout == "true"
+  register: ebtables_install
+  when: ansible_distribution == "Archlinux"
+- debug:
+    var: ebtables_install
+
+- name: Install Kubernetes dep
+  become: yes
+  package:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+    use: yay
+  vars:
+    packages:
+      - ethtool
+      - socat
+      - kubelet-bin
+      - kubeadm-bin
+      - kubectl-bin
+  when: ansible_distribution == "Archlinux"
+
+# - name: Add an apt signing key for containerd
+#   become: yes
+#   apt_key:
+#     url: https://download.docker.com/linux/raspbian/gpg
+#     state: present
+#   when: ansible_distribution == "Debian"
+
 - name: Add an apt signing key for Kubernetes
   become: yes
   apt_key:
     url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
     state: present
+  when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
 
 - name: Adding apt repository for Kubernetes
   become: yes
@@ -11,27 +137,34 @@
     repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
     state: present
     filename: kubernetes.list
+  when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
 
-- name: Fix net.bridge.bridge-nf-call-iptables issue
-  become: yes
-  sysctl:
-    name: "{{item}}"
-    value: 1
-    sysctl_set: yes
-    state: present
-    reload: yes
-  with_items:
-  - net.bridge.bridge-nf-call-iptables
-  - net.bridge.bridge-nf-call-ip6tables
-  - net.bridge.bridge-nf-call-arptables
+# - name: Fix net.bridge.bridge-nf-call-iptables issue
+#   become: yes
+#   sysctl:
+#     name: "{{item}}"
+#     value: 1
+#     sysctl_set: yes
+#     state: present
+#     reload: yes
+#   with_items:
+#   - net.bridge.bridge-nf-call-iptables
+#   - net.bridge.bridge-nf-call-ip6tables
+#   - net.bridge.bridge-nf-call-arptables
 
-- name: Set iptables-legacy
+- name: Set ip_forward
   become: yes
-  command: "update-alternatives --set iptables /usr/sbin/iptables-legacy"
+  command: "echo 1 > /proc/sys/net/ipv4/ip_forward"
+  when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
+
+# - name: Set iptables-legacy
+#   become: yes
+#   command: "update-alternatives --set iptables /usr/sbin/iptables-legacy"
+#   when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
 
 - name: Install Kubernetes binaries
   become: yes
-  apt:
+  package:
     name: "{{ packages }}"
     state: present
     update_cache: yes
@@ -41,25 +174,4 @@
       - kubeadm
       - kubectl
       - kubetail
-
-- name: Include master
-  include_role:
-    name: k8s_masters
-  when: inventory_hostname.find("master")
-
-- name: Include node
-  include_role:
-    name: k8s_node
-  when: inventory_hostname.find("node")
-
-# - name: Configure node ip
-#   lineinfile:
-#     path: /etc/default/kubelet
-#     line: KUBELET_EXTRA_ARGS=--node-ip={{ ansible_host }}
-#     state: present
-
-# - name: Restart kubelet
-#   service:
-#     name: kubelet
-#     daemon_reload: yes
-#     state: restarted
+  when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"

@@ -1,68 +1,116 @@
----
-# - name: Remove previous version of docker and docker engine
-#   apt:
-#     name: "{{ packages }}"
-#     state: absent
+- name: Include ssh initial
+  vars:
+    ssh_delay: "0"
+    ssh_timeout: "20"
+    ssh_ping: true
+    clean: true
+  include_role:
+    name: ssh
+  when: ansible_distribution is not defined
+    or ansible_distribution is defined
+    and ansible_distribution == ''
+
+
+# # Executing docker install script, commit: 1d97565eca92bb523082b7d4f530c74104e05d35
+# + sudo -E sh -c apt-get update -qq >/dev/null
+# + sudo -E sh -c DEBIAN_FRONTEND=noninteractive apt-get install -y -qq apt-transport-https ca-certificates curl >/dev/null
+# + sudo -E sh -c mkdir -p /etc/apt/keyrings && chmod -R 0755 /etc/apt/keyrings
+# + sudo -E sh -c curl -fsSL "https://download.docker.com/linux/raspbian/gpg" | gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
+# + sudo -E sh -c chmod a+r /etc/apt/keyrings/docker.gpg
+# + sudo -E sh -c echo "deb [arch=armhf signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/raspbian bullseye stable" > /etc/apt/sources.list.d/docker.list
+# + sudo -E sh -c apt-get update -qq >/dev/null
+# + sudo -E sh -c DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends docker-ce docker-ce-cli containerd.io docker-compose-plugin >/dev/null
+# + version_gte 20.10
+# + [ -z  ]
+# + return 0
+# + sudo -E sh -c DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-ce-rootless-extras >/dev/null
+
+# - name: Add an apt signing key for Docker
+#   become: yes
+#   apt_key:
+#     url: "https://download.docker.com/linux/{%if ansible_distribution == 'Ubuntu'%}ubuntu{%else%}raspbian{%endif%}/gpg"
+#     state: present
+#   when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
+
+# - name: Add apt repository for stable version
+#   become: yes
+#   apt_repository:
 #     update_cache: yes
+#     repo: "deb [arch={%if ansible_distribution == 'Ubuntu'%}arm64{%else%}armhf{%endif%} ] https://download.docker.com/linux/{%if ansible_distribution == 'Ubuntu'%}ubuntu{%else%}raspbian{%endif%} {%if ansible_distribution == 'Ubuntu'%}focal{%else%}bullseye{%endif%} stable"
+#     state: present
+#   when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
+
+# - name: Install docker
+#   become: yes
+#   package:
+#     name: "{{ packages }}"
+#     state: present
 #   vars:
 #     packages:
-#        - docker
-#        - docker.io
-#        - docker-engine
-#        - containerd
-#        - runc
+#     - apt-transport-https
+#     - ca-certificates
+#     - curl
+#     - docker-ce
+#     - docker-ce-cli
+#     - containerd.io
+#     - docker-compose-plugin
+#     - docker-ce-rootless-extras
+#   when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
 
-- name: Add an apt signing key for Docker
-  become: yes
-  apt_key:
-    url: https://download.docker.com/linux/ubuntu/gpg
-    state: present
 
-- name: Add apt repository for stable version
-  become: yes
-  apt_repository:
-    update_cache: yes
-    repo: deb [arch=arm64] https://download.docker.com/linux/ubuntu focal stable
-    state: present
-
-- name: Install docker and its dependecies
-  become: yes
-  apt:
-    name: "{{ packages }}"
-    state: present
-    update_cache: yes
-  vars:
-    packages:
-    - docker-ce
-    - docker-ce-cli
-    - containerd.io
-
-# - name: Remove swapfile from /etc/fstab
-#   mount:
-#     name: "{{ item }}"
-#     fstype: swap
-#     state: absent
+# Executing docker install script, commit: e5543d473431b782227f8908005543bb4389b8de
+# + sudo -E sh -c apt-get update -qq >/dev/null
+# + sudo -E sh -c DEBIAN_FRONTEND=noninteractive apt-get install -y -qq apt-transport-https ca-certificates curl >/dev/null
+# + sudo -E sh -c install -m 0755 -d /etc/apt/keyrings
+# + sudo -E sh -c curl -fsSL "https://download.docker.com/linux/raspbian/gpg" | gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
+# + sudo -E sh -c chmod a+r /etc/apt/keyrings/docker.gpg
+# + sudo -E sh -c echo "deb [arch=armhf signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/raspbian bullseye stable" > /etc/apt/sources.list.d/docker.list
+# + sudo -E sh -c apt-get update -qq >/dev/null
+# + sudo -E sh -c DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-ce-rootless-extras docker-buildx-plugin >/dev/null
+# + sudo -E sh -c docker version
+# - name: Docker install
+#   command:  "{{ item }}"
+#   become: yes
 #   with_items:
-#     - swap
-#     - none
+#     - curl -sSL https://get.docker.com | sh
+#     - usermod -aG docker pi
+
+# - name: Comment containerd lines
+#   become: yes
+#   run_once: true
+#   replace:
+#     path: "/etc/containerd/config.toml"
+#     regexp: '^({{item}}.*)'
+#     replace: '#\1'
+#   with_items:
+#     - 'disabled_plugins = \["cri"\]'
 
 # - name: Disable swap
-#   command: swapoff -a
-#   when: ansible_swaptotal_mb > 0
+#   command:  "{{ item }}"
+#   become: yes
+#   with_items:
+#     - dphys-swapfile swapoff
+#     - dphys-swapfile uninstall
+#     - update-rc.d dphys-swapfile remove
+#     - systemctl disable dphys-swapfile.service
+#   when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
 
-
-- name: Disable swap
-  command:  "{{ item }}"
+- name: Disable zswap service
   become: yes
-  with_items:
-    - dphys-swapfile swapoff
-    - dphys-swapfile uninstall
-    - update-rc.d dphys-swapfile remove
-    - systemctl disable dphys-swapfile.service
+  service:
+    name: zswap-arm
+    state: stopped
+    enabled: false
+  when: ansible_distribution == "Archlinux"
+
+- name: Disable zswap  
+  become: yes
+  shell: swapoff -a
+  when: ansible_distribution != "Archlinux"
 
 - name: "Searching for a cgroup_enable_cpuset"
   lineinfile:
-    path: /boot/firmware/cmdline.txt
+    path: /boot/cmdline.txt
     line: "cgroup_enable=cpuset"
     regex: "cgroup_enable=cpuset"
     state: present
@@ -71,13 +119,13 @@
 
 - name: 'Enable cgroup_enable=cpuset'
   become: yes
-  command: sed -i '1s/$/ cgroup_enable=cpuset/' /boot/firmware/cmdline.txt
+  command: sed -i '1s/$/ cgroup_enable=cpuset/' /boot/cmdline.txt
   when: cgroup_enable_cpuset.msg == "line added"
   register: _boot_config
 
 - name: "Searching for a cgroup_enable_memory"
   lineinfile:
-    path: /boot/firmware/cmdline.txt
+    path: /boot/cmdline.txt
     line: "cgroup_enable=memory"
     regex: "cgroup_enable=memory"
     state: present
@@ -86,14 +134,13 @@
 
 - name: 'Enable cgroup_enable=memory'
   become: yes
-  command: sed -i '1s/$/ cgroup_enable=memory/' /boot/firmware/cmdline.txt
+  command: sed -i '1s/$/ cgroup_enable=memory/' /boot/cmdline.txt
   when: cgroup_enable_memory.msg == "line added"
   register: _boot_config
 
-
 - name: "Searching for a cgroup_memory"
   lineinfile:
-    path: /boot/firmware/cmdline.txt
+    path: /boot/cmdline.txt
     line: "cgroup_memory=1"
     regex: "cgroup_memory=1"
     state: present
@@ -102,27 +149,30 @@
 
 - name: 'Enable cgroup_memory=1'
   become: yes
-  command: sed -i '1s/$/ cgroup_memory=1/' /boot/firmware/cmdline.txt
+  command: sed -i '1s/$/ cgroup_memory=1/' /boot/cmdline.txt
   when: cgroup_memory.msg == "line added"
   register: _boot_config
 
-
 - name: "Searching for a swapaccount=1"
   lineinfile:
-    path: /boot/firmware/cmdline.txt
+    path: /boot/cmdline.txt
     line: "swapaccount=1"
     regex: "swapaccount=1"
     state: present
   check_mode: yes
   register: swapaccount
 
-
 - name: 'Enable swapaccount=1'
   become: yes
-  command: sed -i '1s/$/ swapaccount=1/' /boot/firmware/cmdline.txt
+  command: sed -i '1s/$/ swapaccount=1/' /boot/cmdline.txt
   when: swapaccount.msg == "line added"
   register: _boot_config
 
+- name: Ensures Docker dir exists
+  become: yes
+  file:
+    path: "/etc/docker"
+    state: directory
 
 - name: Configure Docker daemon options (json)
   become: yes
@@ -132,10 +182,18 @@
     owner: "root"
     group: "root"
     mode: "0644"
-  when: docker__default_daemon_json | d() or docker__daemon_json | d()
+  when: _boot_config.changed == false
+    or
+    docker__default_daemon_json | d() or docker__daemon_json | d()
   notify:
     - "Restart Docker"
-    - systemd_reload
+    # - systemd_reload
+
+- name: Create a directory for the control files
+  become: yes
+  file:
+    path: "/etc/systemd/system/docker.service.d"
+    state: directory
 
 - name: Add user(s) to "docker" group
   become: yes
@@ -145,7 +203,57 @@
     append: true
   loop: "{{ docker__users }}"
 
-- name: "restart machine"  # noqa 503
+- name: Fix net.bridge.bridge-nf-call-iptables issue
+  become: yes
+  sysctl:
+    name: "{{item}}"
+    value: 1
+    sysctl_set: yes
+    state: present
+    reload: yes
+  with_items:
+  - net.bridge.bridge-nf-call-iptables
+  - net.bridge.bridge-nf-call-ip6tables
+  - net.bridge.bridge-nf-call-arptables
+
+# As of Kubernetes 1.20, dockershim is being deprecated. There is an open-source CRI we can use in exchange for our cluster provided by Mirantis called cri-dockerd. To install cri-dockerd and set up the service, run the following commands
+- name: Install cri-dockerd
+  command:  "{{ item }}"
+  become: yes
+  with_items:
+    - rm -fdr cri-*
+    - wget https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.9/cri-dockerd-0.3.9.arm64.tgz
+    - tar -xvzf cri-dockerd-0.3.9.arm64.tgz
+    - rm -fdr /usr/bin/cri-dockerd
+    - mv cri-dockerd /usr/bin/cri-dockerd
+    - chmod +x /usr/bin/cri-dockerd
+    - wget https://raw.githubusercontent.com/Mirantis/cri-dockerd/master/packaging/systemd/cri-docker.service
+    - wget https://raw.githubusercontent.com/Mirantis/cri-dockerd/master/packaging/systemd/cri-docker.socket
+    - mv cri-docker.service /etc/systemd/system/
+    - mv cri-docker.socket /etc/systemd/system/
+    - systemctl daemon-reload
+    # - systemctl enable cri-docker.service
+    # - systemctl enable cri-docker.socket
+    # - systemctl start cri-docker.service
+    # - systemctl start cri-docker.socket
+  notify:
+    #  - systemd_reload
+
+  when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
+
+- name: Start/enable service docker, if not started
+  become: yes
+  service:
+    name: "{{item}}"
+    state: started
+    enabled: true
+  with_items:
+    - containerd
+    - docker
+    - cri-docker.socket
+    - cri-docker.service
+
+- name: "Restart machine"  # noqa 503
   become: yes
   reboot:
     msg: "Reboot by Ansible, because config changed."

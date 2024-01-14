@@ -1,0 +1,8 @@
+- hosts: 
+    - control_plane
+    - k8s_masters
+    - k8s_workers
+  gather_facts: no
+  roles:
+    - role: distribution-switch
+      tags: ds, distribution-switch

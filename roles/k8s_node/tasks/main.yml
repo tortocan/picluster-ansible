@@ -1,26 +1,18 @@
 - name: Generate join command
-  delegate_to: "{{ item }}"
+  delegate_to: "{{ groups['k8s_masters'][0] }}"
+  vars:
+    ansible_user: pi
+  connection: ssh
   become: false
   command: kubeadm token create --print-join-command
-  loop: "{{ groups['k8s_masters'] }}"
   register: join_command
-
-- name: Copy join command to local file
-  local_action: copy content="kubeadm reset --force \n {{ join_command.results[0].stdout_lines[0] }}" dest="~/join-command"
-  become: false
-
-- name: Copy the join command to server location
-  become: yes
-  copy: src=~/join-command dest=~/join-command.sh mode=0777
 
 - name: Join the node to cluster
   become: yes
-  command: sh ~/join-command.sh
+  command: "{{join_command.stdout}}"
   register: join_result
-  failed_when: ' "This node has joined the cluster:" not in join_result.stdout_lines and "already exists in the cluster" not in join_result.stderr'
-
-- name: Create local storage directory if it does not exist
-  file:
-    path: /mnt/disk/vol1
-    state: directory
-    mode: '0777'
+  changed_when: '"This node has joined the cluster:" in join_result.stdout_lines'
+  failed_when: '"This node has joined the cluster:" not in join_result.stdout_lines and "already exists in the cluster" not in join_result.stderr'
+  
+- debug:
+    var: join_result

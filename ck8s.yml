@@ -1,0 +1,10 @@
+- hosts:
+    - k8s_workers
+    - k8s_masters
+    - control_plane
+  become: yes
+  vars:
+    ansible_user: pi
+  become_method: sudo
+  tasks:
+

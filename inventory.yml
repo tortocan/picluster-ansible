@@ -1,50 +1,44 @@
 all:
   hosts:
     c1-master1:
-      ansible_host: "{{ip_class}}51"
-      node_mac: dc:a6:32:32:45:e1
-      node_serial: b582d82e
-      os_disk: /dev/sda
-    c1-master2:
-      ansible_host: "{{ip_class}}52"
-      node_mac: dc:a6:32:32:46:31
-      node_serial: 057754e6
-      os_disk: /dev/sda
-    c1-master3:
-      ansible_host: "{{ip_class}}53"
-      node_mac: dc:a6:32:32:2e:ce
-      node_serial: c365f9ab
-      os_disk: /dev/sda
-    c1-node1:
-      ansible_host: "{{ip_class}}101"
       node_mac: dc:a6:32:b6:3e:01
       node_serial: 23db7b6d
       os_disk: /dev/sda
-      disk: /dev/sdb
-    c1-node2:
-      ansible_host: "{{ip_class}}102"
+    c1-master2:
       node_mac: dc:a6:32:d5:41:b4
       node_serial: 1691df47
       os_disk: /dev/sda
-      disk: /dev/sdb
-    c1-node3:
-      ansible_host: "{{ip_class}}103"
+    c1-master3:
       node_mac: dc:a6:32:d5:cf:d0
       node_serial: "13693741"
+      os_disk: /dev/sda
+    c1-node1:
+      node_mac: dc:a6:32:f1:02:c2
+      node_serial: "68f00c1c"
+      os_disk: /dev/sda
+      disk: /dev/sdb
+    c1-node2:
+      node_mac: dc:a6:32:32:46:31
+      node_serial: 057754e6
+      os_disk: /dev/sda
+      disk: /dev/sdb
+    c1-node3:
+      node_mac: dc:a6:32:32:2e:ce
+      node_serial: c365f9ab
       os_disk: /dev/sda
       disk: /dev/sdb
     router:
       ansible_host: 172.16.0.1
-    pxe-server:
-       ansible_host: "{{ip_class}}61"
-       node_mac: dc:a6:32:f1:02:c2
-       node_serial: "68f00c1c"
-       os_disk: /dev/sda
-       disk: /dev/sdb
+    pikvm:
+      node_mac: dc:a6:32:32:45:e1
+      node_serial: b582d82e
+      os_disk: /dev/sda
+      disk: /dev/sdb
+      Archlinux_user: root
   children:
     control_plane:
       hosts:
-       pxe-server:
+       pikvm:
     k8s_masters:
       hosts:
         c1-master1: 
@@ -58,11 +52,10 @@ all:
   vars:
     clean_root: false
     clean_boot: false
-    ansible_distribution: ""
     ansible_python_interpreter: /usr/bin/python3
-    ip_class: 172.16.0.
+    ip_class: 172.16.1.
     subnet: "{{ip_class}}0/24"
     subnet_name: "LAN"
-    pxe_host: "{{ip_class}}61"
     root_path: "/srv/nfs/rpi4-{{node_serial}}"
     boot_path: "/srv/tftp/{{node_serial}}"
+    pxe_img_dir: "/srv/nfs/images" 

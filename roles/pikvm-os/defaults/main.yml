@@ -1,0 +1,8 @@
+pivkm_img_dir: "./pikvm-os"
+pivkm_os_version: "2"
+pivkm_os_img: "v{{pivkm_os_version}}-hdmi-rpi4-latest.img"
+pivkm_os_archivre: "{{pivkm_os_img}}.xz"
+pivkm_os_url: "https://files.pikvm.org/images/{{pivkm_os_archive}}"
+clean: false
+mount_boot_path: "/media/{{inventory_hostname}}-sda1"
+mount_root_path: "/media/{{inventory_hostname}}-sda2"

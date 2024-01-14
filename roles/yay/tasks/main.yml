@@ -1,0 +1,45 @@
+- name: Include ssh initial
+  vars:
+    ssh_delay: "0" 
+    ssh_timeout: "20"
+    ssh_ping: true
+  include_role:
+    name: ssh
+  when: ansible_distribution is not defined 
+    or ansible_distribution is defined 
+    and ansible_distribution == '' 
+
+- name: Updating cache
+  become: yes
+  pacman:
+    update_cache: true
+
+- name: Installing dependencies
+  become: yes
+  package:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+  vars:
+    packages:
+      - base-devel
+      - git
+      - go
+
+- name: Clone yay
+  become: false
+  git:
+    repo: https://aur.archlinux.org/yay.git
+    dest: ./yay
+
+- name: Make package yay
+  become: false
+  shell: yay -V || makepkg -fs --noconfirm
+  args:
+    chdir: yay/
+
+- name: Install yay package
+  become: yes
+  shell: yay -V || pacman -U yay*.pkg.tar.zst --noconfirm
+  args:
+    chdir: yay/

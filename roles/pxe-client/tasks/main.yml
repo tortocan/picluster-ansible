@@ -1,51 +1,45 @@
-- name: Include distribution switch prefered Ubuntu fallback Debian
-  include_role:
-    name: distribution-switch
-  vars:
-    distribution: "Ubuntu"
-    distribution_ssh_delay_initial: 0 
-    distribution_ssh_timeout_initial: 10
-    distribution_ssh_delay: 5
-    distribution_ssh_timeout: 60
-    distribution_setup_ssh_ping: false
-    distribution_setup_ssh_after_sshpass_initial: true
-    distribution_setup_ssh_after_sshpass: true
-
 - set_fact:
     mount_boot_path: "/media/{{inventory_hostname}}-debian-sda1"
     mount_root_path: "/media/{{inventory_hostname}}-debian-sda2"
     root_path: "/srv/nfs/rpi4-{{node_serial}}"
     boot_path: "/srv/tftp/{{node_serial}}"
+    pxe_server: "{{groups['control_plane'][0]}}"
+    pxe_user: "root"
+    id_rsa_path: "{{lookup('env','HOME')}}/.ssh/id_rsa.pub"
 
-- name: Fallback Reboot {{inventory_hostname}} raspberry
-  shell: /sbin/shutdown -r now "Ansible system" || true
-  async: 1
-  poll: 0
-  become: yes
-  when: > 
-    ssh_con.failed == false
-    and ansible_distribution != "Ubuntu"
-  register: fallback_reboot_raspberry
+- name: Set id rsa contents
+  set_fact:
+    id_rsa_contents: "{{ lookup('file', id_rsa_path) }}"
 
-- name: Clean boot path
-  delegate_to: pxe-server
+- name: Gather facts from {{pxe_server}}
+  ansible.builtin.setup:
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
+
+- name: Print ip from available facts
+  ansible.builtin.debug:
+    var: ansible_facts['all_ipv4_addresses'][0]
+
+- name: Clean boot path
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  vars:
+    ansible_user: "root"
   become: yes
   file:
     state: absent
     path: "{{boot_path}}/"
-  when: > 
-      ssh_con.failed
-      or clean_boot 
+  when: >
+      clean_boot
       or clean
 
 - name: Remove Exports configuration
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
   lineinfile:
     path: "/etc/exports"
@@ -54,49 +48,44 @@
   register: _exports
   with_items:
   - "{{root_path}} *(rw,sync,no_subtree_check,no_root_squash)"
-  - "{{boot_path}} *(rw,sync,no_subtree_check,no_root_squash)"  
+  - "{{boot_path}} *(rw,sync,no_subtree_check,no_root_squash)"
   notify:
     - exports_reload
 
 - meta: flush_handlers
 
-- name: Wait for fallback reboot
-  pause:
-    seconds: 20
-  when: fallback_reboot_raspberry.changed
-
 - name: Clean root path
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
   file:
     state: absent
     path: "{{root_path}}/"
   when: >
-    clean_root 
+    clean_root
     or clean
 
-- name: Creates tmp directory
+- name: Creates img directory
   run_once: true
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   file:
     path: "{{item}}"
     state: directory
     force: true
   with_items:
-    - "{{raspios_img_dir}}"
-    
-- name: Creates media, tftp and nfs directory
-  delegate_to: pxe-server
+    - "{{pxe_img_dir}}"
+
+- name: Creates media directory
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   become: yes
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   file:
     path: "{{item}}"
     state: directory
@@ -104,108 +93,215 @@
   with_items:
     - "{{mount_boot_path}}"
     - "{{mount_root_path}}"
+
+- name: Creates tftp, nfs directory
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  become: yes
+  vars:
+    ansible_user: "root"
+  file:
+    path: "{{item}}"
+    state: directory
+    # owner: nobody
+    # group: nobody
+    # mode: 0777
+    force: true
+  with_items:
     - "{{boot_path}}"
     - "{{root_path}}"
 
-- name: Check if raspbian os img exists
+- name: Check if pxe os img exists
   run_once: true
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
-  find: 
-    paths: "{{raspios_img_dir}}"
-    patterns: raspbianos.img
+    ansible_user: "root"
+  find:
+    paths: "{{pxe_img_dir}}"
+    patterns: raspios.img
   register: osimg
 
-- name: Unarchive a file that needs to be downloaded
+- name: Download pxe img
   run_once: true
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   unarchive:
-    src:  https://downloads.raspberrypi.org/raspios_lite_armhf_latest
-    dest: "{{raspios_img_dir}}"
+    src: https://downloads.raspberrypi.org/raspios_lite_armhf/images/raspios_lite_armhf-2021-11-08/2021-10-30-raspios-bullseye-armhf-lite.zip
+    dest: "{{pxe_img_dir}}"
     remote_src: yes
   when: osimg.matched == 0
 
 - name: Rename file
   run_once: true
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
-  shell: "mv {{raspios_img_dir}}/*.img {{raspios_img_dir}}/raspbianos.img"
+    ansible_user: "root"
+  shell: "mv {{pxe_img_dir}}/*raspios*.img {{pxe_img_dir}}/raspios.img"
   when: osimg.matched == 0
 
-- name: Mount img
-  run_once: true
-  delegate_to: pxe-server
+- name: Add partition mappings
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
-  shell: "x=$(kpartx -a -v {{raspios_img_dir}}/raspbianos.img | awk '{print $3}'); echo $x  | cut -d' ' -f1 |rev| cut -c3- | rev"
+  run_once: true
+  shell: kpartx -av {{pxe_img_dir}}/raspios.img
+  register: kpartx_result
+- debug:
+    var: kpartx_result.stdout
+
+- name: Get partition mappings
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  vars:
+    ansible_user: "root"
+  become: yes
+  run_once: true
+  shell: "x=$(echo '{{kpartx_result.stdout}}' | awk '{print $3}'); echo $x  | cut -d' ' -f1 |rev| cut -c3- | rev"
   register: partx_result
 
 - debug:
-    var: mount_boot_path, mount_root_path
+    var: partx_result.stdout, mount_boot_path, mount_root_path
+
 - name: Mount up boot
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
   shell: mount "/dev/mapper/{{partx_result.stdout}}p1" "{{mount_boot_path}}"
   register: mount
   when: >
-    "/media" in mount_boot_path 
+    "/media" in mount_boot_path
   failed_when: >
-    mount.rc != 0 
+    mount.rc != 0
     and 'already mounted on' not in mount.stderr
     or 'not mounted.' in mount.stderr
   changed_when: >
-    mount.rc == 0  
+    mount.rc == 0
 
 - name: Mount up root
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
   shell: mount "/dev/mapper/{{partx_result.stdout}}p2" "{{mount_root_path}}"
   register: mount
   when: >
-    "/media" in mount_root_path 
+    "/media" in mount_root_path
   failed_when: >
-    mount.rc != 0 
+    mount.rc != 0
     and 'already mounted on' not in mount.stderr
     or 'not mounted.' in mount.stderr
   changed_when: >
-    mount.rc == 0  
+    mount.rc == 0
+
+- name: Inform the DHCP server of our hostname for DDNS.
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  vars:
+    ansible_user: "root"
+  become: yes
+  run_once: true
+  replace:
+    path: "{{mount_root_path}}/etc/dhcpcd.conf"
+    regexp: "#hostname"
+    replace: "hostname"
+
+- name: Disable WPA supplicant.
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  vars:
+    ansible_user: "root"
+  become: yes
+  run_once: true
+  lineinfile:
+    path: "{{mount_root_path}}/etc/dhcpcd.conf"
+    line: "nohook wpa_supplicant"
+    regex: "nohook wpa_supplicant"
+  
+- name: Create custom img script
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  vars:
+    ansible_user: "root"
+  become: yes
+  run_once: true
+  template:
+    src=custom-img.sh.j2
+    dest="/{{mount_root_path}}/custom-img.sh"
+    owner=root
+    group=root
+    mode=0544
+
+- name: Enter chroot run custom-img.sh
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  vars:
+    ansible_user: "root"
+  run_once: true
+  become: yes
+  shell: chroot "{{mount_root_path}}" /bin/bash -c 'chmod +x ./custom-img.sh;./custom-img.sh && exit'
+  register: chroot
+
+- debug:
+    var: chroot.stdout_lines[0]
 
 - name: Copy root into place.
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
-  shell: rsync -azr "{{mount_root_path}}/" "{{root_path}}/"
+  shell: rsync -arW --inplace "{{mount_root_path}}/" "{{root_path}}/"
 
 - name: Copy boot into place.
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
-  shell: rsync --exclude *.elf --exclude *.dat -azr "{{mount_boot_path}}/" "{{boot_path}}/"
+  shell: rsync --exclude *.elf --exclude *.dat -arW --inplace "{{mount_boot_path}}/" "{{boot_path}}/"
 
-- name: Disable Bluetooth and WiFi
-  delegate_to: pxe-server
+- name: Set hostname
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
+  become: yes
+  lineinfile:
+    path: "{{root_path}}/etc/hostname"
+    line: "{{item}}"
+    regex: "raspberry"
+    state: present
+  with_items:
+    - "{{inventory_hostname}}"
+
+- name: Set hosts hostname
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  vars:
+    ansible_user: "root"
+  become: yes
+  lineinfile:
+    path: "{{root_path}}/etc/hosts"
+    line: "127.0.0.1 {{item}}"
+    regex: "raspberry"
+    state: present
+  with_items:
+    - "{{inventory_hostname}}"
+
+- name: Set configuration
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  vars:
+    ansible_user: "root"
   become: yes
   lineinfile:
     path: "{{boot_path}}/config.txt"
@@ -216,12 +312,13 @@
   with_items:
   - dtoverlay=disable-wifi
   - dtoverlay=disable-bt
+  - arm_64bit=1
 
 - name: Cleanup boot configuration
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
   lineinfile:
     path: "{{boot_path}}/cmdline.txt"
@@ -229,10 +326,10 @@
     state: absent
 
 - name: Cleanup fstab
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
   lineinfile:
     path: "{{root_path}}/etc/fstab"
@@ -240,36 +337,24 @@
     state: absent
 
 - name: Enable ssh
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
-  file: 
+  file:
     path: "{{item}}"
     state: touch
   register: ssh
   with_items:
     - "{{boot_path}}/ssh"
-    - "{{root_path}}/boot/ssh" 
-
-- name: Plug {{inventory_hostname}} device and continue
-  connection: local
-  delegate_to: localhost
-  become: false
-  pause:
-    seconds: 300
-  when:  ansible_distribution is not defined
-
-- debug:
-    var: ansible_distribution
-  when: ansible_distribution is defined
+    - "{{root_path}}/boot/ssh"
 
 - name: fstab configuration
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
   lineinfile:
     path: "{{root_path}}/etc/fstab"
@@ -278,13 +363,13 @@
     state: present
   register: _fstab
   with_items:
-  - "{{pxe_host}}:{{boot_path}} /boot nfs defaults,vers=4.1,proto=tcp 0 0"
+  - "{{ansible_facts['all_ipv4_addresses'][0]}}:{{boot_path}} /boot nfs defaults,vers=4.1,proto=tcp 0 0"
 
 - name: Boot configuration
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
   lineinfile:
     path: "{{boot_path}}/cmdline.txt"
@@ -293,13 +378,13 @@
     state: present
   register: _cmdline
   with_items:
-  - "console=serial0,115200 console=tty1 root=/dev/nfs nfsroot={{pxe_host}}:{{root_path}},vers=4.1,proto=tcp rw ip=dhcp rootwait elevator=deadline"
+  - "console=serial0,115200 console=tty1 root=/dev/nfs nfsroot={{ansible_facts['all_ipv4_addresses'][0]}}:{{root_path}},vers=4.1,proto=tcp rw ip=dhcp rootwait elevator=deadline"
 
 - name: Exports configuration
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
   lineinfile:
     path: "/etc/exports"
@@ -309,39 +394,49 @@
   register: _exports
   with_items:
   - "{{root_path}} *(rw,sync,no_subtree_check,no_root_squash)"
-  - "{{boot_path}} *(rw,sync,no_subtree_check,no_root_squash)"   
+  - "{{boot_path}} *(rw,sync,no_subtree_check,no_root_squash)"
   notify:
     - exports_reload
 
 - name: Copy dat and elf files into place.
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
-  shell: rsync --include *.elf --include *.dat --exclude=* -azr "{{mount_boot_path}}/" "{{boot_path}}/"
+  shell: rsync --include *.elf --include *.dat --exclude=* -azW --inplace "{{mount_boot_path}}/" "{{boot_path}}/"
 
 - meta: flush_handlers
 
 - name: Verify Copy dat and elf files into place.
-  delegate_to: pxe-server
+  delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
-    ansible_user: ubuntu
+    ansible_user: "root"
   become: yes
   shell: ls  {{boot_path}}/*.elf
 
-- name: Include distribution switch to RaspiOS
+- name: Include ssh initial
   vars:
-    distribution: "Debian"
-    clean: false
-    distribution_ssh_delay: "{%if  ansible_distribution == ''%}30{%else%}5{%endif%}" 
-    distribution_ssh_timeout: "{%if ansible_distribution == '' %}300{%else%}120{%endif%}"
-    distribution_ssh_delay_initial: "{%if  ansible_distribution == ''%}30{%else%}5{%endif%}" 
-    distribution_ssh_timeout_initial: "{%if ansible_distribution == '' %}300{%else%}120{%endif%}"
-    distribution_setup_ssh_ping: true
-    distribution_setup_ssh_after_sshpass_initial: true
-    distribution_setup_ssh_after_sshpass: true
-    skip_clean_ubuntu: true
+    ssh_delay: "30" 
+    ssh_timeout: "120"
+    ssh_ping: true
+    clean: true
   include_role:
-    name: distribution-switch
+    name: ssh
+  when: ansible_distribution is not defined 
+    or ansible_distribution is defined 
+    and ansible_distribution == ''
+
+# - name: Install pks dep
+#   become: yes
+#   package:
+#     name: "{{ packages }}"
+#     state: present
+#     update_cache: yes
+#   vars:
+#     packages:
+#       - arch-install-scripts
+#       - kpartx
+#       - nmap
+#       - iperf3

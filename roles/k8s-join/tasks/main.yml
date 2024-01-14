@@ -1,0 +1,41 @@
+- name: Include ssh initial
+  vars:
+    ssh_delay: "0" 
+    ssh_timeout: "20"
+    ssh_ping: true
+    clean: true
+  include_role:
+    name: ssh
+  when: ansible_distribution is not defined 
+    or ansible_distribution is defined 
+    and ansible_distribution == '' 
+
+- debug:
+    var: inventory_hostname.find("master"), inventory_hostname.find("node")
+
+- name: Include master
+  include_role:
+    name: k8s_master
+  when: inventory_hostname == groups['k8s_masters'][0]
+
+- name: Include master join
+  include_role:
+    name: k8s_master_join
+  when: inventory_hostname.find("master") > -1 and inventory_hostname != groups['k8s_masters'][0]
+
+- name: Include node
+  include_role:
+    name: k8s_node
+  when: inventory_hostname.find("node") > -1
+
+# - name: Configure node ip
+#   lineinfile:
+#     path: /etc/default/kubelet
+#     line: KUBELET_EXTRA_ARGS=--node-ip={{ ansible_host }}
+#     state: present
+
+# - name: Restart kubelet
+#   service:
+#     name: kubelet
+#     daemon_reload: yes
+#     state: restarted

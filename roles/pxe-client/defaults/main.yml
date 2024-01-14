@@ -1,5 +1,4 @@
 clean_boot: false
 clean_root: false
 clean: false
-raspios_img_dir: /tmp/raspios
 boot_order: "0xf124"

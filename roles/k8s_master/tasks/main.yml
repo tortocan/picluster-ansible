@@ -4,14 +4,8 @@
     var: current_user
 # - pause:
 
-- name: Ensure openshift Python library is installed.
-  pip:
-    name: openshift
-    state: present
-  become: true
-
 - name: Check if kube confing exists for {{current_user}} user
-  stat: 
+  stat:
     path: "/home/{{current_user}}/.kube"
   register: kube
 
@@ -25,12 +19,30 @@
     - mkdir -p "/home/{{current_user}}/.kube"
   when: not kube.stat.exists
 
+
+# - name: Gather facts from {{groups['k8s_masters'][0]}}
+#   ansible.builtin.setup:
+#   delegate_to: "{{groups['k8s_masters'][0]}}"
+#   connection: ssh
+#   vars:
+#     ansible_user: "root"
+- name: Set control plane hostname
+  set_fact:
+    control_plane_hostname: "{{groups['control_plane'][0]}}"
+
+
+- set_fact:
+    # k8scmd: "kubeadm init --control-plane-endpoint='{{groups['control_plane'][0]}}.lan:6443' --upload-certs --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address='{{ansible_facts['all_ipv4_addresses'][0]}}' --apiserver-cert-extra-sans='{{groups['control_plane'][0]}}.lan' --node-name {{ inventory_hostname }}"
+    k8scmd: "kubeadm init --control-plane-endpoint='{{control_plane_hostname}}.lan:6443' --apiserver-cert-extra-sans='{{control_plane_hostname}}.lan,localhost,127.0.0.1' --upload-certs --apiserver-advertise-address='{{hostvars[inventory_hostname]['ansible_facts']['eth0']['ipv4']['address']}}'  --node-name {{ inventory_hostname }} --pod-network-cidr=192.168.0.0/16 --cri-socket 'unix:///var/run/cri-dockerd.sock'"
+    #k8scmd: "kubeadm init --control-plane-endpoint='{{groups['k8s_masters'][0]}}.lan:6443' --upload-certs --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address='{{hostvars[groups['k8s_masters'][0]]['ansible_default_ipv4']['address']}}' --apiserver-cert-extra-sans='k8s.lan' --node-name {{ inventory_hostname }}"
+    # k8scmd: "kubeadm init --control-plane-endpoint='{{groups['control_plane'][0]}}.lan:6443' --upload-certs --pod-network-cidr=192.168.0.0/16 --node-name {{ inventory_hostname }}"
+- debug: var=k8scmd
 - name: "Initialize the Kubernetes cluster using kubeadm"
   become: yes
   run_once: 'yes'
-  command: "kubeadm init --apiserver-advertise-address='{{ ansible_host }}' --apiserver-cert-extra-sans='{{ ansible_host }}' --node-name {{ inventory_hostname }}"
+  command: "{{k8scmd}}"
   when: not kube.stat.exists
-
+  
 - name: Setup kubeconfig for {{current_user}} user
   command: "{{ item }}"
   become: yes
@@ -42,6 +54,13 @@
 - name: Restart kubelet
   command: /bin/true
   notify: restart kubelet
+
+- name: Waiting haproxy k8s to be ready
+  wait_for:
+    host: "{{groups['control_plane'][0]}}.lan"
+    port: 6443
+    delay: 0
+    timeout: 2
 
 - name: Wait for k8s to be ready
   wait_for:
@@ -60,97 +79,20 @@
   command: kubectl get services --all-namespaces -ojsonpath='{.items[?(@.metadata.name=="kube-dns")].spec.clusterIP}'
   register: kubednsaddress
 
+- debug:
+    var: "{{ kubednsaddress.stdout }}"
+
 - name: Wait for dns to be ready
-  wait_for: 
-    host: "{{ kubednsaddress.stdout }}" 
-    port: 53 
-    state: started 
+  wait_for:
+    host: "{{ kubednsaddress.stdout }}"
+    port: 53
+    state: started
     timeout: 1800
 
-- name: Create metal lb namespace.
-  become: false
-  command: "{{ item }}"
-  with_items:
-    - kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/namespace.yaml
-
-- name: Create metal lb secret
-  become: false
-  command: kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"
-  when: not kube.stat.exists
-
-- name: Install metal lb
-  become: false
-  command: "{{ item }}"
-  with_items:
-    - kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/metallb.yaml
-  when: not kube.stat.exists
-
-- name: Create the metal lb config map
-  become: false
-  k8s:
-    state: present
-    definition:
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        namespace: metallb-system
-        name: config
-      data:
-        config: |
-          address-pools:
-          - name: default
-            protocol: layer2
-            addresses:
-            - 192.168.0.240/28
-- name: Create nginx-deployment
-  become: false
-  k8s:
-    state: present
-    definition:
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        namespace: default
-        name: nginx-deployment
-      spec:
-        selector:
-          matchLabels:
-            app: nginx
-        replicas: 3
-        template:
-          metadata:
-            labels:
-              app: nginx
-          spec:
-            containers:
-            - name: nginx
-              image: nginx:latest
-              ports:
-              - containerPort: 80
-
-- name: Create nginx-service
-  become: false
-  k8s:
-    state: present
-    definition:
-      apiVersion: v1
-      kind: Service
-      metadata:
-        namespace: default
-        name: nginx
-      spec:
-        type: LoadBalancer
-        selector:
-          app: nginx
-        ports:
-        - port: 80
-          name: http
-
-- name: Kubectl bash completion
-  become: yes
-  become_user: root
-  shell: kubectl completion bash > /etc/bash_completion.d/kubectl
-  when: not kube.stat.exists
+# - name: Kubectl bash completion
+#   become: yes
+#   shell: kubectl completion bash > /etc/bash_completion.d/kubectl
+#   when: not kube.stat.exists
 
 - name: Kubectl alias complete
   become: false
@@ -163,3 +105,4 @@
   - alias k=kubectl
   - complete -F __start_kubectl k
   when: not kube.stat.exists
+

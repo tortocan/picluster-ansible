@@ -1,0 +1,93 @@
+- name: Include ssh initial
+  vars:
+    ssh_delay: "0" 
+    ssh_timeout: "20"
+    ssh_ping: true
+    clean: true
+  include_role:
+    name: ssh
+  when: ansible_distribution is not defined 
+    or ansible_distribution is defined 
+    and ansible_distribution == '' 
+
+- debug:
+    var: inventory_hostname.find("master"), inventory_hostname.find("node")
+
+- name: Waiting haproxy server to come back
+  ignore_errors: true
+  wait_for:
+    host: "{{groups['control_plane'][0]}}.lan"
+    port: 6443
+    delay: 0
+    timeout: 2
+  register: wait_k8s
+  become: false
+
+- debug:
+    var: wait_k8s
+
+- name: Delete node
+  delegate_to: "{{ groups['k8s_masters'][0] }}"
+  become: false
+  ignore_errors: yes
+  command:  kubectl delete node {{inventory_hostname}}
+  register: leave_command
+  when: wait_k8s.failed == false
+
+- name: Reset k8s
+  command: kubeadm reset --force
+  become: yes
+- name: Clear ip tables and link
+  command: "{{item}}"
+  ignore_errors: yes
+  loop:
+    - iptables -F
+    - iptables -t nat -F
+    - iptables -t mangle -F
+    - iptables -X
+    - ip link delete $(ip a | grep cali | awk '{print $2}' | cut -d "@" -f 1)
+    - ip link delete tunl0
+    - ip link delete docker0
+
+- name: Reload kubelet
+  become: yes
+  service:
+    name: kubelet
+    state: stopped
+
+- name: Remove k8s files
+  become: yes
+  file:
+    path: "{{item}}"
+    state: absent
+  loop:
+    - /etc/cni/net.d/
+    - /var/lib/kubelet/
+    - /home/{{ansible_user}}/.kube/
+    - /home/root/.kube/
+
+# - name: Prune docker system and remove all containers, volumes.
+#   command: "{{item}}"
+#   become: false
+#   with_items:
+#     - docker system prune -f
+#     - docker container stop $(docker container ls -aq)
+#     - docker container rm $(docker container ls -aq)
+#     - docker volume prune -f
+
+- name: Reload systemd
+  become: yes
+  systemd:
+    daemon_reload: true
+
+- name: Reload kubelet
+  become: yes
+  service:
+    name: kubelet
+    state: restarted
+
+- name: Restart CNI
+  become: yes
+  systemd:
+    name: "containerd"
+    state: "restarted"

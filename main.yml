@@ -18,39 +18,29 @@
     - k8s_workers
   gather_facts: no
   vars:
-    distribution: "Ubuntu"
-    distribution_ssh_delay: "{%if  ansible_distribution == ''%}30{%else%}5{%endif%}" 
-    distribution_ssh_timeout: "{%if ansible_distribution == '' %}300{%else%}120{%endif%}"
-    distribution_ssh_delay_initial: 0
-    distribution_ssh_timeout_initial: 10
-    distribution_setup_ssh_ping: true
-    distribution_setup_ssh_after_sshpass_initial: true
+    force_pxe_boot_state: "disabled"
+    force_usb_boot_state: "disabled"
   roles:
     - role: distribution-switch
-      tags: ds
+      tags: ds, distribution-switch, os
+
+# - hosts: control_plane
+#   gather_facts: no
+#   vars:
+#     force_update: false
+#   roles:
+#     - role: pi-update-rom
+#       tags: control-plane, pi-update-rom , os
+#     # - role: ubuntu-os
+#     #   tags: control-plane, ubuntu-os, os
 
 - hosts: control_plane
   gather_facts: no
-  vars:
-    ansible_user: pi
-    ansible_password: "{{pi_password}}"
-    boot_order: "0xf14"
-    force_update: false
-    pi_update_rom_has_pxe: false
   roles:
-    - role: pi-update-rom
-      tags: control-plane, pi-update-rom , os
-    - role: ubuntu-os
-      tags: control-plane, ubuntu-os, os
-
-- hosts: control_plane
-  vars:
-    ansible_user: ubuntu
-    ansible_password: "{{ubuntu_password}}"
-    pi_update_rom_has_pxe: false
-  roles:
-    - role: common
-      tags: control-plane, common, os
+    # - role: common
+    #   tags: control-plane, common, os
+    - role: pikvm-os
+      tags: control-plane, pikvm-os, os
     - role: pxe-server
       tags: control-plane, pxe-server, os
 
@@ -63,15 +53,24 @@
     force_update: false
   roles:
     - role: pxe-client
-      tags: pxe-client, raspios, os
+      tags: pxe-client,pc, raspios, os
     - role: pi-update-rom
-      tags: pi-update-rom, rapsios, os 
+      tags: pi-update-rom,pur, rapsios, os 
+    - role: manjaro-os
+      tags: manjaro-os
+    - role: raspbian-os
+      tags: raspbian-os
     - role: ubuntu-os
-      tags: ubuntu-os, os
+      tags: ubuntu-os
     - role: common
       tags: common, os
     - role: docker
       tags: docker
-    # - role: k8s
-    #   tags: k8s
-
+    - role: k8s
+      tags: k8s, k8s-os
+    - role: k8s-reset
+      tags: k8s-reset
+    - role: k8s-join
+      tags: k8s-join, k8s-os
+    - role: metallb
+      tags: metallb, k8s-join

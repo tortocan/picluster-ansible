@@ -1,0 +1,336 @@
+- set_fact:
+    mount_boot_path: "/media/{{inventory_hostname}}-archlinux-sda1"
+    mount_root_path: "/media/{{inventory_hostname}}-archlinux-sda2"
+    id_rsa_path: "{{lookup('env','HOME')}}/.ssh/id_rsa.pub"
+
+- name: Set id rsa contents 
+  set_fact:
+    id_rsa_contents: "{{ lookup('file', id_rsa_path) }}"
+
+- name: Include ssh initial
+  vars:
+    ssh_delay: "0" 
+    ssh_timeout: "20"
+    ssh_ping: true
+    clean: true
+  include_role:
+    name: ssh
+  when: ansible_distribution is not defined 
+    or ansible_distribution is defined 
+    and ansible_distribution == '' 
+
+- name: Creates mount point directories
+  become: yes
+  file:
+    path: "{{item}}"
+    state: directory
+    force: true
+  with_items:
+    - "{{mount_root_path}}"
+    - "{{mount_boot_path}}"
+
+- name: Creates img directories
+  file:
+    path: "{{item}}"
+    state: directory
+    force: true
+  with_items:
+    - "{{pivkm_img_dir}}"
+
+- name: Check if archive img exists
+  run_once: true
+  changed_when: img_exists.stdout == 'false'
+  shell: "test -e {{pivkm_img_dir}}/{{pivkm_os_img}} && echo true || echo false"
+  register: img_exists
+
+- debug:
+    var: img_exists, pivkm_os_url
+
+- name: Download os image
+  run_once: true
+  get_url:
+    url: "{{pivkm_os_url}}"
+    dest: "{{pivkm_img_dir}}"
+  when: img_exists.changed
+
+- name: Extract
+  run_once: true
+  shell: "xz -d {{pivkm_img_dir}}/{{pivkm_os_archive}}"
+  when: img_exists.changed
+
+- name: Wipe disk
+  become: yes
+  shell: umount -lf {{os_disk}}* && umount -lf {{os_disk}}*; wipefs -a {{os_disk}}
+  register: wipe
+  failed_when: >
+    wipe.rc != 0 
+    and 'not mounted.' not in wipe.stderr
+  when: clean
+
+- name: Check if os_disk boot partition exists
+  shell: test -e "{{os_disk}}1" && echo true || echo false
+  changed_when: os_disk_boot_exists.stdout == 'true'
+  register: os_disk_boot_exists
+
+- name: Write to disk
+  become: yes
+  shell: dd bs=64k if={{pivkm_img_dir}}/{{pivkm_os_img}} of={{os_disk}} iflag=fullblock oflag=direct
+  when: os_disk_boot_exists.stdout == 'false'
+
+- name: Check if os_disk boot exists after write
+  shell: test -e "{{os_disk}}1" && echo true || echo false
+  changed_when: os_disk_boot_exists_after.stdout == 'true'
+  failed_when: os_disk_boot_exists_after.stdout == 'false'
+  register: os_disk_boot_exists_after
+- debug:
+    var: os_disk_boot_exists_after.stdout, bootconfig_order.changed, bootconf_extract.changed
+
+- name: Read device information (always use unit when probing)
+  become: yes
+  parted: "device={{os_disk}} unit=MiB"
+  register: dev_info
+
+- debug:
+    var: dev_info
+
+- name: Delete MSD part
+  become: yes
+  parted:
+    device: "{{os_disk}}"
+    number: 3
+    state: absent
+  when: os_disk_boot_exists.stdout == 'false'
+
+- name: Extend root part
+  become: yes
+  parted:
+    device: "{{os_disk}}"
+    number: 2
+    part_end: "80%"
+    resize: true
+    state: present
+  when: os_disk_boot_exists.stdout == 'false'
+
+- name: Read device information (always use unit when probing)
+  become: yes
+  parted: "device={{os_disk}} unit=%"
+  register: dev_info2
+
+- debug:
+    var: dev_info2
+
+- name: Create MSD part
+  become: yes
+  parted:
+    device: "{{os_disk}}"
+    number: 3
+    part_start: "{{dev_info2.partitions[1].end | int }}%"
+    part_end: "100%"
+    resize: true
+    fs_type: "{{dev_info.partitions[2].fstype}}"
+    state: present
+  when: os_disk_boot_exists.stdout == 'false'
+
+- name: Create MSD fs (this is needed only because parted is not creating the fs)
+  become: yes
+  shell: "mkfs.ext4 {{os_disk}}3"
+  when: os_disk_boot_exists.stdout == 'false'
+
+- name: Resize fs (this is needed only because parted is not resizing the fs)
+  become: yes
+  shell: "resize2fs {{os_disk}}{{item}}"
+  when: os_disk_boot_exists.stdout == 'false'
+  with_items:
+    - 2
+    - 3
+
+- name: Read device information (always use unit when probing)
+  become: yes
+  parted: "device={{os_disk}} unit=MiB"
+  register: dev_info
+
+- debug:
+    var: dev_info
+
+- name: Mount up os disk boot partition
+  become: yes
+  shell: mount "{{os_disk}}1" "{{mount_boot_path}}"
+  register: mount
+  when: >
+    "/media" in mount_boot_path 
+  failed_when: >
+    mount.rc != 0 
+    and 'already mounted on' not in mount.stderr
+    or 'not mounted.' in mount.stderr
+  changed_when: >
+    mount.rc == 0  
+    
+- name: Mount up os disk root partition
+  become: yes
+  shell: mount "{{os_disk}}2" "{{mount_root_path}}"
+  register: mount2
+  when: >
+    "/media" in mount_root_path 
+  failed_when: >
+    mount2.rc != 0 
+    and 'already mounted on' not in mount2.stderr
+    or 'not mounted.' in mount2.stderr
+  changed_when: >
+    mount2.rc == 0  
+
+- name: Create init script
+  become: yes
+  run_once: true
+  template:
+    src=init.sh.j2
+    dest="/{{mount_root_path}}/init.sh"
+    owner=root
+    group=root
+    mode=0544
+
+- name: Install packages
+  become: yes
+  package:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+    - arch-install-scripts 
+
+- name: Enter chroot run init.sh
+  run_once: true
+  become: yes
+  shell: arch-chroot "{{mount_root_path}}" /bin/bash -c 'chmod +x ./init.sh;./init.sh && exit'
+  register: chroot
+
+- debug:
+    var: chroot.stdout_lines[0]
+
+- name: Present configuration
+  become: yes
+  run_once: true
+  lineinfile:
+    path: "{{mount_boot_path}}/config.txt"
+    line: "{{item}}"
+    regex: "{{item}}"
+    state: present
+  register: _config
+  with_items:
+    - dtoverlay=disable-wifi
+    - dtoverlay=disable-bt
+    # - arm_64bit=1
+
+- name: Set usb boot cmd
+  become: yes
+  run_once: true
+  replace:
+    path: "{{mount_boot_path}}/cmdline.txt"
+    regexp: "/dev/mmcblk0p"
+    replace: "/dev/sda"
+
+- name: Set usb boot cmd change option ro to rw.
+  become: yes
+  run_once: true
+  replace:
+    path: "{{mount_boot_path}}/cmdline.txt"
+    regexp: " ro "
+    replace: " rw "
+
+- name: Set usb boot fstab
+  become: yes
+  run_once: true
+  replace:
+    path: "{{mount_root_path}}/etc/fstab"
+    regexp: "/dev/mmcblk0p"
+    replace: "/dev/sda"
+
+- name: Set usb boot fstab change option ro to rw.
+  become: yes
+  run_once: true
+  replace:
+    path: "{{mount_root_path}}/etc/fstab"
+    regexp: " ro,"
+    replace: " rw,"
+
+- name: Comment tmpfs lines in fstab
+  become: yes
+  run_once: true
+  replace:
+    path: "{{mount_root_path}}/etc/fstab"
+    regexp: '^({{item}}.*)'
+    replace: '#\1'
+  with_items:
+    - /var/lib
+    - /var/log
+    - tmpfs
+
+- name: Uncomment lines in fstab
+  become: yes
+  run_once: true
+  replace:
+    path: "{{mount_root_path}}/etc/fstab"
+    regexp: '^#(.*{{item}}.*)'
+    replace: '\1'
+  with_items:
+    - /dev/sda3
+
+- name: Set usb boot kvmd
+  become: yes
+  run_once: true
+  replace:
+    path: "{{mount_root_path}}/usr/bin/kvmd-bootconfig"
+    regexp: "{{item}}"
+    replace: "/dev/sda"
+  with_items:
+    - /dev/mmcblk0p
+    - /dev/mmcblk0
+
+- name: Set usb boot kvmd rw fs
+  become: yes
+  run_once: true
+  replace:
+    path: "{{mount_root_path}}/usr/bin/kvmd-bootconfig"
+    regexp: "\tro"
+    replace: "\trw"
+
+- name: Inform the DHCP server of our hostname for DDNS.
+  become: yes
+  run_once: true
+  replace:
+    path: "{{mount_root_path}}/etc/dhcpcd.conf"
+    regexp: "#hostname"
+    replace: "hostname"
+
+- name: Template KVM daemon override
+  become: yes
+  run_once: true
+  template:
+    src=override.yaml.j2
+    dest="/{{mount_root_path}}/etc/kvmd/override.yaml"
+
+- name: Commands are executed from the user kvmd. If you want to run the command as root
+  become: yes
+  run_once: true
+  lineinfile:
+    path: "{{mount_root_path}}/etc/sudoers.d/custom_commands"
+    line: "{{item}}"
+    regex: "{{item}}"
+    state: present
+    create: true
+  with_items:
+    - "kvmd ALL=(ALL) NOPASSWD: /usr/bin/reboot"
+
+- name: Include distribution switch to Archlinux
+  vars:
+    distribution: "Archlinux"
+    clean: true
+    distribution_ssh_delay_initial: 5
+    distribution_ssh_timeout_initial: 120
+    distribution_setup_ssh_after_sshpass_initial: true
+    distribution_ssh_user_after_reboot: "{{Archlinux_user}}"
+    distribution_ssh_delay: 30
+    distribution_ssh_timeout: 90
+    distribution_setup_ssh_ping: true
+    force_pxe_boot_state: true
+  include_role:
+    name: distribution-switch

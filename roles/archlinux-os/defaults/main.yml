@@ -1,0 +1,9 @@
+archlinux_img_dir: ./images
+archlinux_os_version: "21.10"
+archlinux_os_filename: "archlinux-ARM-minimal-rpi4-{{archlinux_os_version}}"
+archlinux_os_img: "{{archlinux_os_filename}}.img"
+archlinux_os_archive: "{{archlinux_os_img}}.xz"
+archlinux_os_url: "https://os.archlinuxarm.org/os/ArchLinuxARM-rpi-aarch64-latest.tar.gz"
+clean: false
+mount_boot_path: "/media/{{inventory_hostname}}-sda1"
+mount_root_path: "/media/{{inventory_hostname}}-sda2"

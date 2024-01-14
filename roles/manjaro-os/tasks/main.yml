@@ -1,0 +1,275 @@
+- set_fact:
+    mount_root_path: "/media/{{inventory_hostname}}-manjaro"
+    pxe_server: "{{groups['control_plane'][0]}}"
+    pxe_user: "root"
+    id_rsa_path: "{{lookup('env','HOME')}}/.ssh/id_rsa.pub"
+
+- name: Set id rsa contents 
+  set_fact:
+    id_rsa_contents: "{{ lookup('file', id_rsa_path) }}"
+
+- name: Include ssh initial
+  vars:
+    ssh_delay: "0" 
+    ssh_timeout: "20"
+    ssh_ping: true
+    clean: true
+  include_role:
+    name: ssh
+  when: ansible_distribution is not defined 
+    or ansible_distribution is defined 
+    and ansible_distribution == '' 
+
+- name: Creates mount point directories
+  become: yes
+  file:
+    path: "{{item}}"
+    state: directory
+    force: true
+  with_items:
+    - "{{mount_root_path}}"
+    - "{{manjaro_img_dir}}"
+
+- name: Mount up images download directory
+  become: yes
+  shell: mount -t nfs "{{hostvars[pxe_server].ansible_host | default(hostvars[pxe_server].inventory_hostname)}}:/srv/nfs/images" "{{manjaro_img_dir}}"
+  register: mount
+  failed_when: >
+    mount.rc != 0 
+    and 'already mounted on' not in mount.stderr
+    or 'not mounted.' in mount.stderr
+  changed_when: >
+    mount.rc == 0 
+
+- name: Find if archive img exists
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  become: yes
+  vars:
+    ansible_user: "root"
+  find:
+    paths: "{{pxe_img_dir}}"
+    file_type: file
+    pattern: "{{manjaro_os_img}}"
+  register: find_img
+- debug:
+    var: find_img, manjaro_os_url
+
+- name: Download os image
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  vars:
+    ansible_user: "root"
+  run_once: true
+  get_url:
+    url: "{{manjaro_os_url}}"
+    dest: "{{pxe_img_dir}}"
+  when: find_img.matched == 0
+
+- name: Extract
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  vars:
+    ansible_user: "root"
+  run_once: true
+  become: yes
+  shell: "xz -d /srv/nfs/images/{{manjaro_os_archive}}"
+  when: find_img.matched == 0
+
+- name: Wipe disk
+  become: yes
+  shell: umount {{os_disk}}*; wipefs -a {{os_disk}}
+  when: clean
+
+- name: Add partition mappings
+  become: yes
+  shell: kpartx -av {{manjaro_img_dir}}/{{manjaro_os_img}}
+  register: kpartx_result
+- debug:
+    var: kpartx_result.stdout
+
+- name: Get partition mappings
+  become: yes
+  shell: "x=$(echo '{{kpartx_result.stdout}}' | awk '{print $3}'); echo $x  | cut -d' ' -f1 |rev| cut -c3- | rev"
+  register: partx_result
+
+- name: Mount img up root
+  become: yes
+  shell: mount "/dev/mapper/{{partx_result.stdout}}p2" "{{mount_root_path}}"
+  register: mount
+  when: >
+    "/media" in mount_root_path 
+  failed_when: >
+    mount.rc != 0 
+    and 'already mounted on' not in mount.stderr
+    or 'not mounted.' in mount.stderr
+  changed_when: >
+    mount.rc == 0  
+
+- name: Mount img up boot
+  become: yes
+  shell: mount "/dev/mapper/{{partx_result.stdout}}p1" "{{mount_root_path}}/boot"
+  register: mount
+  when: >
+    "/media" in mount_root_path
+  failed_when: >
+    mount.rc != 0 
+    and 'already mounted on' not in mount.stderr
+    or 'not mounted.' in mount.stderr
+  changed_when: >
+    mount.rc == 0  
+
+- name: Inform the DHCP server of our hostname for DDNS.
+  become: yes
+  run_once: true
+  replace:
+    path: "{{mount_root_path}}/etc/dhcpcd.conf"
+    regexp: "#hostname"
+    replace: "hostname"
+
+- name: Present configuration
+  become: yes
+  run_once: true
+  lineinfile:
+    path: "{{mount_root_path}}/boot/config.txt"
+    line: "{{item}}"
+    regex: "{{item}}"
+    state: present
+  register: _config
+  with_items:
+    - dtoverlay=disable-wifi
+    - dtoverlay=disable-bt
+    - arm_64bit=1
+
+- name: Create init script
+  become: yes
+  run_once: true
+  template:
+    src=init.sh.j2
+    dest="/{{mount_root_path}}/init.sh"
+    owner=root
+    group=root
+    mode=0544
+
+- name: Enter chroot run init.sh
+  run_once: true
+  become: yes
+  shell: arch-chroot "{{mount_root_path}}" /bin/bash -c 'chmod +x ./init.sh;./init.sh && exit'
+  register: chroot
+
+- debug:
+    var: chroot
+
+- name: Umount img
+  run_once: true
+  become: yes
+  shell: umount "{{mount_root_path}}/boot"; umount "{{mount_root_path}}"
+
+- name: Check if os_disk boot partition exists
+  shell: test -e "{{os_disk}}1" && echo true || echo false
+  changed_when: os_disk_boot_exists.stdout == 'true'
+  register: os_disk_boot_exists
+
+- name: Write to disk
+  become: yes
+  shell: dd bs=64k if={{manjaro_img_dir}}/{{manjaro_os_img}} of={{os_disk}} iflag=fullblock oflag=direct
+  when:  os_disk_boot_exists.stdout == 'false'
+
+- name: Check if os_disk boot exists after write
+  shell: test -e "{{os_disk}}1" && echo true || echo false
+  changed_when: os_disk_boot_exists.stdout == 'true'
+  register: os_disk_boot_exists
+- debug:
+    var: os_disk_boot_exists.stdout, bootconfig_order.changed, bootconf_extract.changed
+
+- name: Read device information (always use unit when probing)
+  become: yes
+  parted: "device={{os_disk}} unit=MiB"
+  register: dev_info
+
+- debug:
+    var: dev_info
+
+- name: Extend root part
+  become: yes
+  register: parted
+  parted:
+    device: "{{os_disk}}"
+    number: 2
+    part_end: "100%"
+    resize: true
+    state: present
+
+- name: Check fs
+  become: yes
+  shell: "e2fsck -pf {{os_disk}}{{item}}"
+  when: parted.changed
+  with_items:
+    - 2
+    
+- name: Resize fs
+  become: yes
+  shell: "resize2fs {{os_disk}}{{item}}"
+  when: parted.changed
+  with_items:
+    - 2
+
+- name: Read device information (always use unit when probing)
+  become: yes
+  parted: "device={{os_disk}} unit=GiB"
+  register: dev_info
+
+- debug:
+    var: dev_info
+
+    
+- name: Mount up os disk root partition
+  become: yes
+  shell: mount "{{os_disk}}2" "{{mount_root_path}}"
+  register: mount2
+  when: >
+    "/media" in mount_root_path 
+  failed_when: >
+    mount2.rc != 0 
+    and 'already mounted on' not in mount2.stderr
+    or 'not mounted.' in mount2.stderr
+  changed_when: >
+    mount2.rc == 0
+
+- name: Mount up os disk boot partition
+  become: yes
+  shell: mount "{{os_disk}}1" "{{mount_root_path}}/boot"
+  register: mount
+  when: >
+    "/media" in mount_root_path
+  failed_when: >
+    mount.rc != 0
+    and 'already mounted on' not in mount.stderr
+    or 'not mounted.' in mount.stderr
+  changed_when: >
+    mount.rc == 0
+
+- name: Set hostname
+  become: yes
+  lineinfile:
+    path: "{{mount_root_path}}/etc/hostname"
+    line: "{{item}}"
+    regex: "manjaro"
+    state: present
+  with_items:
+    - "{{inventory_hostname}}"
+
+- name: Include distribution switch to Archlinux
+  vars:
+    distribution: "Archlinux"
+    clean: true
+    distribution_ssh_delay_initial: 5
+    distribution_ssh_timeout_initial: 120
+    distribution_setup_ssh_after_sshpass_initial: true
+    distribution_ssh_user_after_reboot: "{{Archlinux_user}}"
+    distribution_ssh_delay: 30
+    distribution_ssh_timeout: 90
+    distribution_setup_ssh_ping: true
+    force_pxe_boot_state: true
+  include_role:
+    name: distribution-switch

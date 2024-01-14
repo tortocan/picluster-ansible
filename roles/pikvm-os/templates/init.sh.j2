@@ -1,0 +1,14 @@
+if test -e ~/.ssh; then
+    echo 'Ssh exists'   
+else
+    { # try
+        echo 'Init ssh'
+        rw
+        #pacman -Syu --noconfirm
+        mkdir /root/.ssh && chmod u=xrw /root/.ssh && touch /root/.ssh/authorized_keys && chmod u=rw /root/.ssh/authorized_keys && echo "{{id_rsa_contents}}" > /root/.ssh/authorized_keys && ls -la
+    } || { # catch
+        echo 'Error ssh'
+        exit
+    }
+fi
+exit

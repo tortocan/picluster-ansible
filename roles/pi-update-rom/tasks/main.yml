@@ -1,41 +1,15 @@
 
-- name: Include distribution switch to RaspiOS
-  vars:
-    distribution: "Debian"
-    distribution_ssh_delay: "{%if  ansible_distribution == ''%}30{%else%}5{%endif%}" 
-    distribution_ssh_timeout: "{%if ansible_distribution == '' %}300{%else%}120{%endif%}"
-    distribution_ssh_delay_initial: 0
-    distribution_ssh_timeout_initial: 10
-    distribution_setup_ssh_ping: true
-    distribution_setup_ssh_after_sshpass_initial: true
-    has_pxe: "{{pi_update_rom_has_pxe}}"
-  include_role:
-    name: distribution-switch
-
-- name: Fix slow apt update
-  vars:
-    ansible_user: pi
-  become: yes
-  sysctl:
-    name: "{{item}}"
-    value: 1
-    sysctl_set: yes
-    state: present
-    reload: yes
-  with_items:
-    - net.ipv6.conf.all.disable_ipv6
-    - net.ipv6.conf.default.disable_ipv6
-    - net.ipv6.conf.lo.disable_ipv6
-  register: ip6
-
-- name: Restart service networking
-  vars:
-    ansible_user: pi
-  become: yes
-  service:
-    name: networking
-    state: restarted
-  when: ip6.changed
+# - name: Include distribution switch to RaspiOS
+#   vars:
+#     distribution: "Debian"
+#     distribution_ssh_delay: "{%if  ansible_distribution == ''%}30{%else%}5{%endif%}"
+#     distribution_ssh_timeout: "{%if ansible_distribution == '' %}300{%else%}120{%endif%}"
+#     distribution_ssh_delay_initial: 0
+#     distribution_ssh_timeout_initial: 10
+#     distribution_setup_ssh_ping: true
+#     distribution_setup_ssh_after_sshpass_initial: true
+#   include_role:
+#     name: distribution-switch
 
 - name: Setup rpi-eeprom-update branch
   vars:
@@ -43,7 +17,7 @@
   become: yes
   lineinfile:
     path: /etc/default/rpi-eeprom-update
-    line: 'FIRMWARE_RELEASE_STATUS="default"'
+    line: 'FIRMWARE_RELEASE_STATUS="stable"'
     regex: "FIRMWARE_RELEASE_STATUS="
     state: present
 
@@ -101,6 +75,7 @@
    - "MAX_RESTARTS=1"
    - "SD_BOOT_MAX_RETRIES=1"
    - "NET_BOOT_MAX_RETRIES=1"
+   - "USB_MSD_DISCOVER_TIMEOUT=10000"
   
 - name: Update ROM
   vars:
@@ -122,4 +97,3 @@
     update_available 
     or force_update 
     or bootconf.changed
-

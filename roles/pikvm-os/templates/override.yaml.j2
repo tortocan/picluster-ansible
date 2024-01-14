@@ -1,0 +1,141 @@
+####################################################################
+#                                                                  #
+# Override Pi-KVM system settings. This file uses the YAML syntax. #
+#                                                                  #
+#    https://github.com/pikvm/pikvm/blob/master/pages/config.md    #
+#                                                                  #
+# All overridden parameters will be applied AFTER other configs    #
+# and "!include" directives and BEFORE validation.                 #
+# Not: Sections should be combined under shared keys.              #
+#                                                                  #
+####################################################################
+#
+#########
+# Wrong #
+#########
+#kvmd:
+#    gpio:
+#        drivers: ...
+#kvmd:
+#    gpio:
+#        scheme: ...
+#
+###########
+# Correct #
+###########
+#kvmd:
+#    gpio:
+#        drivers: ...
+#        scheme: ...
+#
+###########
+# Example #
+###########
+#vnc:
+#    # See https://github.com/pikvm/pikvm/blob/master/pages/vnc.md
+#    keymap: /usr/share/kvmd/keymaps/ru # Set russian keymap
+#    auth:
+#        vncauth:
+#            enabled: true # Enable auth via /etc/kvmd/vncpasswd
+
+kvmd:
+    gpio:
+        drivers:
+            tes:
+                type: tesmart
+                host: 192.168.1.10
+                port: 5000
+            reboot:
+                type: cmd
+                cmd: [/usr/bin/sudo, reboot]
+        scheme:
+            server0_led:
+                driver: tes
+                pin: 0
+                mode: input
+            server0_switch:
+                driver: tes
+                pin: 0
+                mode: output
+                switch: false    
+            server1_led:
+                driver: tes
+                pin: 1
+                mode: input
+            server1_switch:
+                driver: tes
+                pin: 1
+                mode: output
+                switch: false    
+            server2_led:
+                driver: tes
+                pin: 2
+                mode: input
+            server2_switch:
+                driver: tes
+                pin: 2
+                mode: output
+                switch: false    
+            server3_led:
+                driver: tes
+                pin: 3
+                mode: input
+            server3_switch:
+                driver: tes
+                pin: 3
+                mode: output
+                switch: false
+            server4_led:
+                driver: tes
+                pin: 4
+                mode: input
+            server4_switch:
+                driver: tes
+                pin: 4
+                mode: output
+                switch: false
+            server5_led:
+                driver: tes
+                pin: 5
+                mode: input
+            server5_switch:
+                driver: tes
+                pin: 5
+                mode: output
+                switch: false
+            server6_led:
+                driver: tes
+                pin: 6
+                mode: input
+            server6_switch:
+                driver: tes
+                pin: 6
+                mode: output
+                switch: false
+            server7_led:
+                driver: tes
+                pin: 7
+                mode: input
+            server7_switch:
+                driver: tes
+                pin: 7
+                mode: output
+                switch: false
+            reboot_button:
+                driver: reboot
+                pin: 8
+                mode: output
+                switch: false           
+        view:
+            table:
+                - ["reboot_button|confirm|Reboot PiKVM"]
+                - ["TESMART Switch"]
+                - []
+                - ["#Port 1", server0_led, server0_switch|Switch]
+                - ["#Port 2", server1_led, server1_switch|Switch]
+                - ["#Port 3", server2_led, server2_switch|Switch]
+                - ["#Port 4", server3_led, server3_switch|Switch]
+                - ["#Port 5", server4_led, server4_switch|Switch]
+                - ["#Port 6", server5_led, server5_switch|Switch]
+                - ["#Port 7", server6_led, server6_switch|Switch]
+                - ["#Port 8", server7_led, server7_switch|Switch]

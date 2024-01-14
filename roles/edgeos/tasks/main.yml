@@ -4,6 +4,7 @@
       - set service dhcp-server shared-network-name {{subnet_name}} subnet {{subnet}} static-mapping {{item}} ip-address {{hostvars[item].ansible_host}}
       - set service dhcp-server shared-network-name {{subnet_name}} subnet {{subnet}} static-mapping {{item}} mac-address {{hostvars[item].node_mac}}
   with_items: "{{ groups[master_group_name] +  groups[worker_group_name]   +  groups['control_plane'] }}"
+  when: hostvars[item].ansible_host is defined
 
 
 - name: Set TFTP Server Name

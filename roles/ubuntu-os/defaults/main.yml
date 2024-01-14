@@ -1,2 +1,5 @@
-ubuntu_img_folder: ./ubuntu-os
+ubuntu_img_dir: ./ubuntu-os
 clean: false
+mount_boot_path: "/media/{{inventory_hostname}}-sda1"
+mount_root_path: "/media/{{inventory_hostname}}-sda2"
+ansible_user: "{{Debian_user}}"

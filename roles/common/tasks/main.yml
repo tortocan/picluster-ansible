@@ -1,112 +1,25 @@
 
-- name: Check if snap exists
-  stat: path=/var/lib/snapd
-  register: snap
-
-# - name: Remove Snaps
-#   become: yes
-#   command: "snap remove {{item}}"
-#   with_items:
-#   - lxd
-#   - core18
-#   - snapd
-#   when: snap.stat.exists
-
-# - name: Remove "snap" package
-#   become: yes
-#   apt:
-#     name: snapd
-#     purge: 'yes'
-#     state: absent
-#   when: snap.stat.exists
-
-- name: Disable Bluetooth and WiFi
+- name: Install packages
   become: yes
-  lineinfile:
-    path: /boot/firmware/config.txt
-    line: "{{item}}"
-    regex: "{{item}}"
+  ansible.builtin.package:
+    name: "{{ item }}"
     state: present
-  register: _user_config
   with_items:
-  - dtoverlay=disable-wifi
-  - dtoverlay=disable-bt
-
-# - name: DNS stop systemd-resolved from using port 53
-#   lineinfile:
-#     path: /etc/systemd/resolved.conf
-#     line: "DNSStubListener=no"
-#     regex: "#DNSStubListener=yes"
-#     state: present
-#   register: _systemd_result
-
-# - name: Create a symbolic link
-#   become: yes
-#   file:
-#     force: yes
-#     src: /run/systemd/resolve/resolv.conf
-#     dest: /etc/resolv.conf
-#     state: link
-
-- name: Set a hostname
-  become: yes
-  hostname:
-    name: "{{inventory_hostname}}"
-  register: _hostname_result
-
-- name: Fix sudo su hostname
-  become: yes
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 {{inventory_hostname}} localhost"
-    regex: "127.0.0.1 localhost"
-    state: present
-
-- include: reboot-task.yml
-  when:   _user_config.changed or _hostname_result.changed
-
-- name: 'Update and upgrade apt packages'
-  become: yes
-  apt:
-    upgrade: 'yes'
-    update_cache: yes
-    cache_valid_time: 86400
-
-- name: Install packages that allow apt to be used over HTTPS
-  become: yes
-  apt:
-    name: "{{ packages }}"
-    state: present
-    update_cache: yes
-  vars:
-    packages:
-    - apt-transport-https
+    # - apt-transport-https
     - ca-certificates
     - curl
-    - gnupg-agent
-    - software-properties-common
-
-- name: 'Install packages'
-  become: yes
-  apt:
-    pkg:
-      - python3-pip
-      - python3-setuptools
-      - aptitude
-      - golang
-      - git
-      - bash-completion
-      - nfs-common
-      - dphys-swapfile
-      - lvm2
-      - xfsprogs
-      - btrfs-progs
-      - ceph-common
-
-# - name: 'Install ntp'
-#   become: yes
-#   apt:
-#     state: absent
-#     pkg:
-#       - ntp
-#       - ntpdate
+    # - gnupg-agent
+    # - software-properties-common
+    # - python3-pip
+    # - python3-setuptools
+    # - aptitude
+    # - golang
+    - git
+    - bash-completion
+    # - nfs-common
+    # - dphys-swapfile
+    - lvm2
+    - xfsprogs
+    - btrfs-progs
+    - rsync
+    - lsb-release

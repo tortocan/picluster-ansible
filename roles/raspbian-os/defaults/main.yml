@@ -1,0 +1,5 @@
+clean_boot: false
+clean_root: false
+clean: false
+pxe_img_dir: "/srv/nfs/images"
+os_disk: "/dev/sda"
