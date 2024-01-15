@@ -33,7 +33,7 @@
 
 - name: "Searching for a cgroup_enable_cpuset"
   lineinfile:
-    path: /boot/cmdline.txt
+    path: /boot/firmware/cmdline.txt
     line: "cgroup_enable=cpuset"
     regex: "cgroup_enable=cpuset"
     state: present
@@ -42,13 +42,13 @@
 
 - name: 'Enable cgroup_enable=cpuset'
   become: yes
-  command: sed -i '1s/$/ cgroup_enable=cpuset/' /boot/cmdline.txt
+  command: sed -i '1s/$/ cgroup_enable=cpuset/' /boot/firmware/cmdline.txt
   when: cgroup_enable_cpuset.msg == "line added"
   register: _boot_config
 
 - name: "Searching for a cgroup_enable_memory"
   lineinfile:
-    path: /boot/cmdline.txt
+    path: /boot/firmware/cmdline.txt
     line: "cgroup_enable=memory"
     regex: "cgroup_enable=memory"
     state: present
@@ -57,13 +57,13 @@
 
 - name: 'Enable cgroup_enable=memory'
   become: yes
-  command: sed -i '1s/$/ cgroup_enable=memory/' /boot/cmdline.txt
+  command: sed -i '1s/$/ cgroup_enable=memory/' /boot/firmware/cmdline.txt
   when: cgroup_enable_memory.msg == "line added"
   register: _boot_config
 
 - name: "Searching for a cgroup_memory"
   lineinfile:
-    path: /boot/cmdline.txt
+    path: /boot/firmware/cmdline.txt
     line: "cgroup_memory=1"
     regex: "cgroup_memory=1"
     state: present
@@ -72,13 +72,13 @@
 
 - name: 'Enable cgroup_memory=1'
   become: yes
-  command: sed -i '1s/$/ cgroup_memory=1/' /boot/cmdline.txt
+  command: sed -i '1s/$/ cgroup_memory=1/' /boot/firmware/cmdline.txt
   when: cgroup_memory.msg == "line added"
   register: _boot_config
 
 - name: "Searching for a swapaccount=1"
   lineinfile:
-    path: /boot/cmdline.txt
+    path: /boot/firmware/cmdline.txt
     line: "swapaccount=1"
     regex: "swapaccount=1"
     state: present
@@ -87,7 +87,7 @@
 
 - name: 'Enable swapaccount=1'
   become: yes
-  command: sed -i '1s/$/ swapaccount=1/' /boot/cmdline.txt
+  command: sed -i '1s/$/ swapaccount=1/' /boot/firmware/cmdline.txt
   when: swapaccount.msg == "line added"
   register: _boot_config
 

@@ -126,6 +126,12 @@
     cacheable: no
   when: ssh_user is defined and ssh_user != ''
 
+- name: Set authorized keys
+  authorized_key:
+    user: "{{ssh_user}}"
+    state: present
+    key: "{{ssh_keys}}"
+
 - debug:
     var: host_setup.ansible_facts['ansible_distribution'], host_setup.ansible_facts['ansible_user_id']
 

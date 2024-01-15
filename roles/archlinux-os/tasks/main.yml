@@ -1,7 +1,8 @@
 - set_fact:
     mount_boot_path: "/media/{{inventory_hostname}}-archlinux-sda1"
     mount_root_path: "/media/{{inventory_hostname}}-archlinux-sda2"
-    pxe_server: "{{groups['control_plane'][0]}}"
+    # pxe_server: "{{groups['control_plane'][0]}}"
+    pxe_server: "pikvm"
     pxe_user: "root"
     id_rsa_path: "{{lookup('env','HOME')}}/.ssh/id_rsa.pub"
 

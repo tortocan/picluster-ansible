@@ -1,3 +1,14 @@
+- name: Include ssh initial
+  vars:
+    ssh_delay: "0"
+    ssh_timeout: "20"
+    ssh_ping: true
+    clean: true
+  include_role:
+    name: ssh
+  when: ansible_distribution is not defined
+    or ansible_distribution is defined
+    and ansible_distribution == ''
 
 - name: Install packages
   become: yes
@@ -5,7 +16,7 @@
     name: "{{ item }}"
     state: present
   with_items:
-    # - apt-transport-https
+    - apt-transport-https
     - ca-certificates
     - curl
     # - gnupg-agent
@@ -23,3 +34,7 @@
     - btrfs-progs
     - rsync
     - lsb-release
+    - arch-install-scripts
+    - kpartx
+    - nmap
+    - iperf3

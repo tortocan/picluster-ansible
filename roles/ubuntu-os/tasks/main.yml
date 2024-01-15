@@ -65,7 +65,7 @@
   vars:
     ansible_user: "root"
   run_once: true
-  stat: path="/srv/nfs/images/ubuntu-22.04.1-preinstalled-server-arm64+raspi.img"
+  stat: path="/srv/nfs/images/ubuntu-23.10-preinstalled-server-arm64+raspi.img"
   register: img
 
 - name: Download ubuntu image
@@ -75,7 +75,7 @@
     ansible_user: "root"
   run_once: true
   get_url:
-    url: https://cdimage.ubuntu.com/releases/22.04/release/ubuntu-22.04.1-preinstalled-server-arm64+raspi.img.xz
+    url: https://cdimage.ubuntu.com/releases/23.10/release/ubuntu-23.10-preinstalled-server-arm64+raspi.img.xz
     dest: "/srv/nfs/images"
   when: img.skipped is not defined and img.stat.exists == false
 
@@ -86,12 +86,40 @@
     ansible_user: "root"
   run_once: true
   become: yes
-  shell: xz -d /srv/nfs/images/*.img.xz
+  shell: xz -d /srv/nfs/images/ubuntu*.img.xz
   when: img.skipped is not defined and img.stat.exists == false
+
+
+- set_fact:
+    id_rsa_path: "{{lookup('env','HOME')}}/.ssh/id_rsa.pub"
+    when: img.skipped is not defined and img.stat.exists == false
+- name: Set id rsa contents
+  set_fact:
+    id_rsa_contents: "{{ lookup('file', id_rsa_path) }}"
+
+- name: Create custom cloud init
+  become: yes
+  run_once: true
+  template:
+    src=cloud.yml.j2
+    dest="/{{mount_root_path}}/etc/cloud/cloud.cfg"
+    owner=root
+    group=root
+    mode=0544
+
+- name: Wipe disk
+  become: yes
+  shell: umount {{os_disk}}*; wipefs -a {{os_disk}}
+  when: clean
+
+- name: Read device information (always use unit when probing)
+  become: yes
+  parted: "device={{os_disk}} unit=MiB"
+  register: dev_info
 
 - name: Write to disk
   become: yes
-  shell: dd bs=64k if={{ubuntu_img_dir}}/ubuntu-22.04.1-preinstalled-server-arm64+raspi.img of={{os_disk}} iflag=fullblock oflag=direct
+  shell: dd bs=64k if={{ubuntu_img_dir}}/ubuntu-23.10-preinstalled-server-arm64+raspi.img of={{os_disk}} iflag=fullblock oflag=direct
 
 - name: Check if os_disk exists
   stat: 
@@ -99,6 +127,55 @@
   register: os_disk_result
 - debug:
     var: os_disk_result.changed, bootconfig_order.changed, bootconf_extract.changed
+
+- name: Read device information (always use unit when probing)
+  become: yes
+  parted: "device={{os_disk}} unit=MiB"
+  register: dev_info
+
+- debug:
+    var: dev_info
+
+- name: Extend root part
+  become: yes
+  register: parted
+  parted:
+    device: "{{os_disk}}"
+    number: 2
+    part_end: "100%"
+    resize: true
+    state: present
+
+- name: Check repair fs
+  become: yes
+  # shell: "e2fsck -pf {{os_disk}}{{item}}"
+  shell: "e2fsck -p {{os_disk}}{{item}}"
+  when: parted.changed
+  with_items:
+    - 2
+
+- name: Check fs
+  become: yes
+  # shell: "e2fsck -pf {{os_disk}}{{item}}"
+  shell: "e2fsck -fp {{os_disk}}{{item}}"
+  when: parted.changed
+  with_items:
+    - 2
+
+- name: Resize fs
+  become: yes
+  shell: "resize2fs {{os_disk}}{{item}}"
+  when: parted.changed
+  with_items:
+    - 2
+
+- name: Read device information (always use unit when probing)
+  become: yes
+  parted: "device={{os_disk}} unit=GiB"
+  register: dev_info
+
+- debug:
+    var: dev_info
     
 - name: Mount up ubuntu disk boot partition
   become: yes
@@ -125,42 +202,22 @@
     or 'not mounted.' in mount2.stderr
   changed_when: >
     mount2.rc == 0  
-
-# - name: Netplan 99
+ 
+# - name: Expire user password
 #   become: yes
 #   lineinfile:
-#     path: "{{mount_root_path}}/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg"
-#     line: "{{item}}"
-#     regex: "{{item}}"
+#     path: "{{mount_boot_path}}/user-data"
+#     line: "  expire: false"
+#     regex: "  expire: true"
 #     state: present
-#     create: yes
-#   with_items:
-#     - "network: {config: disabled}"
 
-# - name: Netplan 50
+# - name: Set user-data hostname
 #   become: yes
 #   lineinfile:
-#     path: "{{mount_root_path}}/etc/netplan/50-cloud-init.yaml"
-#     line: "              driver: bcmgenet"
-#     regex: "              driver: bcmgenet smsc95xx lan78xx"
+#     path: "{{mount_boot_path}}/user-data"
+#     line: "hostname: {{inventory_hostname}}"
+#     regex: "hostname"
 #     state: present
- 
- 
-- name: Expire user password
-  become: yes
-  lineinfile:
-    path: "{{mount_boot_path}}/user-data"
-    line: "  expire: false"
-    regex: "  expire: true"
-    state: present
-
-- name: Set user-data hostname
-  become: yes
-  lineinfile:
-    path: "{{mount_boot_path}}/user-data"
-    line: "hostname: {{inventory_hostname}}"
-    regex: "hostname"
-    state: present
 
 # - name: Disable Bluetooth and WiFi
 #   become: yes

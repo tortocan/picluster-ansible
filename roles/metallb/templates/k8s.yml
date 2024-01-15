@@ -1,33 +1,51 @@
+# apiVersion: metallb.io/v1beta1
+# kind: IPAddressPool
+# metadata:
+#   name: metallb-pool
+#   namespace: metallb-system
+# spec:
+#   avoidBuggyIPs: true
+#   addresses:
+#   - 172.16.1.243-172.16.1.254
+# ---
+# apiVersion: metallb.io/v1beta1
+# kind: BGPAdvertisement
+# metadata:
+#   name: metallb-advertisment
+#   namespace: metallb-system
+# spec:
+#   ipAddressPools:
+#   - metallb-pool
+#   aggregationLength: 32
+#   localPref: 100
+#   communities:
+#   - 65535:65282
+# ---
+# apiVersion: metallb.io/v1beta2
+# kind: BGPPeer
+# metadata:
+#   name: erx
+#   namespace: metallb-system
+# spec:
+#   myASN: 64511
+#   peerASN: 64510
+#   peerAddress: 172.16.1.7
+#   peerPort: 179
+---
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
-  name: metallb-pool
+  name: first-pool
   namespace: metallb-system
 spec:
-  avoidBuggyIPs: true
   addresses:
-  - 172.16.1.243/22
+  - 172.16.1.243-172.16.1.254
 ---
 apiVersion: metallb.io/v1beta1
-kind: BGPAdvertisement
+kind: L2Advertisement
 metadata:
-  name: metallb-advertisment
+  name: example
   namespace: metallb-system
 spec:
   ipAddressPools:
-  - metallb-pool
-  aggregationLength: 32
-  localPref: 100
-  communities:
-  - 65535:65282
----
-apiVersion: metallb.io/v1beta2
-kind: BGPPeer
-metadata:
-  name: erx
-  namespace: metallb-system
-spec:
-  myASN: 64511
-  peerASN: 64510
-  peerAddress: 172.16.1.7
-  peerPort: 179
+  - first-pool

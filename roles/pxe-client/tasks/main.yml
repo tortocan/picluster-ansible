@@ -122,16 +122,26 @@
     patterns: raspios.img
   register: osimg
 
-- name: Download pxe img
-  run_once: true
+
+- name: Download os image
   delegate_to: "{{pxe_server}}"
   connection: ssh
   vars:
     ansible_user: "root"
-  unarchive:
-    src: https://downloads.raspberrypi.org/raspios_lite_armhf/images/raspios_lite_armhf-2021-11-08/2021-10-30-raspios-bullseye-armhf-lite.zip
+  run_once: true
+  get_url:
+    url: "https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2023-12-11/2023-12-11-raspios-bookworm-arm64-lite.img.xz"
     dest: "{{pxe_img_dir}}"
-    remote_src: yes
+  when: osimg.matched == 0
+
+- name: Extract
+  delegate_to: "{{pxe_server}}"
+  connection: ssh
+  vars:
+    ansible_user: "root"
+  run_once: true
+  become: yes
+  shell: "xz -d /srv/nfs/images/*-raspios-*.img.xz"
   when: osimg.matched == 0
 
 - name: Rename file
@@ -202,29 +212,19 @@
   changed_when: >
     mount.rc == 0
 
-- name: Inform the DHCP server of our hostname for DDNS.
-  delegate_to: "{{pxe_server}}"
-  connection: ssh
-  vars:
-    ansible_user: "root"
-  become: yes
-  run_once: true
-  replace:
-    path: "{{mount_root_path}}/etc/dhcpcd.conf"
-    regexp: "#hostname"
-    replace: "hostname"
+# - name: Inform the DHCP server of our hostname for DDNS.
+#   delegate_to: "{{pxe_server}}"
+#   connection: ssh
+#   vars:
+#     ansible_user: "root"
+#   become: yes
+#   run_once: true
+#   replace:
+#     path: "{{mount_root_path}}/etc/dhcpcd.conf"
+#     regexp: "#hostname"
+#     replace: "hostname"
 
-- name: Disable WPA supplicant.
-  delegate_to: "{{pxe_server}}"
-  connection: ssh
-  vars:
-    ansible_user: "root"
-  become: yes
-  run_once: true
-  lineinfile:
-    path: "{{mount_root_path}}/etc/dhcpcd.conf"
-    line: "nohook wpa_supplicant"
-    regex: "nohook wpa_supplicant"
+#
   
 - name: Create custom img script
   delegate_to: "{{pxe_server}}"
