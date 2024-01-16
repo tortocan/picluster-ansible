@@ -23,7 +23,6 @@
     - bash-completion
     - btrfs-progs
     - kpartx
-    - e2fsck
     - hdparm
     - smartmontools
 

@@ -32,6 +32,8 @@
   ignore_errors: yes
   command:  kubectl delete node {{inventory_hostname}}
   register: leave_command
+  vars:
+    ansible_user: "ubuntu"
   when: wait_k8s.failed == false
 
 - name: Reset k8s
