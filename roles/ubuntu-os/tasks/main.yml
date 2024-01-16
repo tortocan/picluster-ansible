@@ -65,7 +65,11 @@
   vars:
     ansible_user: "root"
   run_once: true
-  stat: path="/srv/nfs/images/ubuntu-23.10-preinstalled-server-arm64+raspi.img"
+  stat:
+    path: "/srv/nfs/images/ubuntu-23.10-preinstalled-server-arm64+raspi.img"
+    get_checksum: no
+    get_attributes: no
+    get_mime: no
   register: img
 
 - name: Download ubuntu image
@@ -89,28 +93,38 @@
   shell: xz -d /srv/nfs/images/ubuntu*.img.xz
   when: img.skipped is not defined and img.stat.exists == false
 
-
-- set_fact:
-    id_rsa_path: "{{lookup('env','HOME')}}/.ssh/id_rsa.pub"
-    when: img.skipped is not defined and img.stat.exists == false
-- name: Set id rsa contents
-  set_fact:
-    id_rsa_contents: "{{ lookup('file', id_rsa_path) }}"
-
-- name: Create custom cloud init
-  become: yes
-  run_once: true
-  template:
-    src=cloud.yml.j2
-    dest="/{{mount_root_path}}/etc/cloud/cloud.cfg"
-    owner=root
-    group=root
-    mode=0544
-
 - name: Wipe disk
   become: yes
-  shell: umount {{os_disk}}*; wipefs -a {{os_disk}}
+  shell: "{{item}}"
+  register: wipe
+  failed_when: >
+    'umount' in item
+    and  wipe.rc != 0
+    and 'already mounted on' in wipe.stderr
+    or
+    'wipefs' in item
+    and wipe.rc != 0
+    or
+    'dd' in item
+    and wipe.rc != 0
+    or
+    'smartctl' in item
+    and 'No Errors Logged' not in wipe.stdout
+  changed_when: >
+    wipe.rc == 0
+  with_items:
+    - smartctl -l error {{os_disk}}
+    - umount {{os_disk}}*
+    - wipefs -fa {{os_disk}}
+    - dd if=/dev/zero of={{os_disk}} bs=1024 count=50
+    - smartctl -l error {{os_disk}}
+
   when: clean
+
+# smartctl -t long /dev/sda
+# (make sure each test completes before running the next one).
+# smartctl -t offline /dev/sda
+# smartctl -x /dev/sda
 
 - name: Read device information (always use unit when probing)
   become: yes
@@ -124,6 +138,9 @@
 - name: Check if os_disk exists
   stat: 
     path: "{{os_disk}}"
+    get_checksum: no
+    get_attributes: no
+    get_mime: no
   register: os_disk_result
 - debug:
     var: os_disk_result.changed, bootconfig_order.changed, bootconf_extract.changed
@@ -203,26 +220,44 @@
   changed_when: >
     mount2.rc == 0  
  
-# - name: Expire user password
-#   become: yes
-#   lineinfile:
-#     path: "{{mount_boot_path}}/user-data"
-#     line: "  expire: false"
-#     regex: "  expire: true"
-#     state: present
+- set_fact:
+    id_rsa_path: "{{lookup('env','HOME')}}/.ssh/id_rsa.pub"
+    when: img.skipped is not defined and img.stat.exists == false
+- name: Set id rsa contents
+  set_fact:
+    id_rsa_contents: "{{ lookup('file', id_rsa_path) }}"
 
-# - name: Set user-data hostname
+# - pause: cloud-init schema --config-file "{{mount_root_path}}/etc/cloud/cloud.cfg"; cloud-init schema --system; cat /var/log/cloud-init-output.log
+- name: Create custom cloud init
+  become: yes
+  template:
+    src: cloud.yml.j2
+    dest: "{{mount_root_path}}/etc/cloud/cloud.cfg"
+
+- name: Create custom user data
+  become: yes
+  template:
+    src: user-data.yml.j2
+    dest: "{{mount_boot_path}}/user-data"
+# - pause:
+
+# - name: Creating autologin file with content
 #   become: yes
 #   lineinfile:
-#     path: "{{mount_boot_path}}/user-data"
-#     line: "hostname: {{inventory_hostname}}"
-#     regex: "hostname"
-#     state: present
+#     mode: 0644
+#     name: "{{mount_root_path}}/etc/systemd/system/getty@tty1.service.d/override.conf"
+#     line: "{{item}}"
+#     create: yes
+#   with_items: >
+#     [Service]
+#       Type=simple
+#       ExecStart=
+#       ExecStart=-/sbin/agetty --autologin ubuntu --noclear %I 38400 linux
 
 # - name: Disable Bluetooth and WiFi
 #   become: yes
 #   lineinfile:
-#     path: "{{mount_boot_path}}/config.txt"
+#     path: "{{mount_boot_path}}/boot/firmware/config.txt"
 #     line: "{{item}}"
 #     regex: "{{item}}"
 #     state: present
@@ -235,13 +270,11 @@
   vars:
     distribution: "Ubuntu"
     clean: true
-    distribution_ssh_delay_initial: 1 
+    distribution_ssh_delay_initial: 1
     distribution_ssh_timeout_initial: 1
-    distribution_setup_ssh_after_sshpass_initial: true
     distribution_ssh_user_after_reboot: ubuntu
-    distribution_ssh_delay: 30 
+    distribution_ssh_delay: 30
     distribution_ssh_timeout: 90
     distribution_setup_ssh_ping: true
-    force_pxe_boot_state: true
   include_role:
     name: distribution-switch

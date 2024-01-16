@@ -261,11 +261,9 @@
     clean: true
     distribution_ssh_delay_initial: 0
     distribution_ssh_timeout_initial: 120
-    distribution_setup_ssh_after_sshpass_initial: true
     distribution_ssh_user_after_reboot: "{{Debian_user}}"
     distribution_ssh_delay: 0
     distribution_ssh_timeout: 90
     distribution_setup_ssh_ping: true
-    force_pxe_boot_state: true
   include_role:
     name: distribution-switch

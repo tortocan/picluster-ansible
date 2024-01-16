@@ -17,9 +17,6 @@
     - k8s_masters
     - k8s_workers
   gather_facts: no
-  vars:
-    force_pxe_boot_state: "disabled"
-    force_usb_boot_state: "disabled"
   roles:
     - role: distribution-switch
       tags: ds, distribution-switch, os

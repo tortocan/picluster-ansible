@@ -6,6 +6,9 @@
 - name: Check if cluster-monitoring repo already exists.
   stat:
     path: ~/cluster-monitoring/vars.jsonnet
+    get_checksum: no
+    get_attributes: no
+    get_mime: no
   register: vars_file_exists
 
 - name: Retrieve and template cluster-monitoring manifests.

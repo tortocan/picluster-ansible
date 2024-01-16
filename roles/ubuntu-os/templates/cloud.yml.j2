@@ -1,3 +1,4 @@
+#cloud-config
 # The top level settings are used as module
 # and base configuration.
 
@@ -10,6 +11,48 @@ users:
 # If this is set, 'root' will not be able to ssh in and they
 # will get a message to login instead as the default $user
 disable_root: true
+
+## hostname and /etc/hosts management
+# cloud-init can handle updating some entries in /etc/hosts,
+# and can set your hostname for you.
+#
+# if you do nothing you'll end up with:
+#  * /etc/hostname (and `hostname`) managed via: 'preserve_hostame: false'
+#    if you do not change /etc/hostname, it will be updated with the cloud
+#    provided hostname on each boot.  If you make a change, then manual
+#    maintenance takes over, and cloud-init will not modify it.
+#
+#  * /etc/hosts managed via: 'manage_etc_hosts: false'
+#    cloud-init will not manage /etc/hosts at all.  It is in full manual
+#    maintenance mode.
+#
+# You can change the above behavior with the following config variables:
+#  Remember that these can be set in cloud-config via user-data,
+#  /etc/cloud/cloud.cfg or any file in /etc/cloud/cloud.cfg.d/
+#
+# == Hostname management (via /etc/hostname) ==
+#  * preserve_hostname:
+#      default: False
+#      If this option is set to True, then /etc/hostname will never updated
+#      The default behavior is to update it if it has not been modified by
+#      the user.
+#
+#  * hostname:
+#      this option will be used wherever the 'hostname' is needed
+#      simply substitute it in the description above.
+#      ** If you wish to set your hostname, set it here **
+#      default: 'hostname' as returned by the metadata service
+#               on EC2, the hostname portion of 'local-hostname' is used
+#               which is something like 'ip-10-244-170-199'
+#
+#  * fqdn:
+#      this option will be used wherever 'fqdn' is needed.
+#      simply substitue it in the description above.
+#      default: fqdn as returned by the metadata service.  on EC2 'hostname'
+#               is used, so this is like: ip-10-244-170-199.ec2.internal
+#
+# == /etc/hosts management ==
+#
 
 # This will cause the set+update hostname module to not operate (if true)
 preserve_hostname: false
@@ -69,8 +112,8 @@ cloud_final_modules:
   - ubuntu_drivers
   - write_files_deferred
   - puppet
-  - chef
-  - ansible
+#  - chef
+#  - ansible
   - mcollective
   - salt_minion
   - reset_rmc
@@ -95,7 +138,7 @@ system_info:
   # Default user name + that default users groups (if added/used)
   default_user:
     name: ubuntu
-    lock_passwd: True
+    lock_passwd: false
     gecos: Ubuntu
     groups: [adm, cdrom, dip, lxd, sudo]
     sudo: ["ALL=(ALL) NOPASSWD:ALL"]
@@ -173,54 +216,32 @@ ssh_authorized_keys:
 #ssh:
 #  emit_keys_to_console: false
 
- Install additional packages on first boot
+## Update apt database and upgrade packages on first boot
+#package_update: true
+#package_upgrade: true
+
+# Install additional packages on first boot
 #
 # Default: none
 #
 # if packages are specified, then package_update will be set to true
 
-packages: ['kpartx'. 'nmap'. 'iperf3']
+# packages: ['kpartx', 'nmap', 'iperf3', 'lvm2', 'xfsprogs', 'btrfs-progs', 'rsync', 'lsb-release']
 
-## hostname and /etc/hosts management
-# cloud-init can handle updating some entries in /etc/hosts,
-# and can set your hostname for you.
+# run commands
+# default: none
+# runcmd contains a list of either lists or a string
+# each item will be executed in order at rc.local like level with
+# output to the console
+# - runcmd only runs during the first boot
+# - if the item is a list, the items will be properly executed as if
+#   passed to execve(3) (with the first arg as the command).
+# - if the item is a string, it will be simply written to the file and
+#   will be interpreted by 'sh'
 #
-# if you do nothing you'll end up with:
-#  * /etc/hostname (and `hostname`) managed via: 'preserve_hostame: false'
-#    if you do not change /etc/hostname, it will be updated with the cloud
-#    provided hostname on each boot.  If you make a change, then manual
-#    maintenance takes over, and cloud-init will not modify it.
-#
-#  * /etc/hosts managed via: 'manage_etc_hosts: false'
-#    cloud-init will not manage /etc/hosts at all.  It is in full manual
-#    maintenance mode.
-#
-# You can change the above behavior with the following config variables:
-#  Remember that these can be set in cloud-config via user-data,
-#  /etc/cloud/cloud.cfg or any file in /etc/cloud/cloud.cfg.d/
-#
-# == Hostname management (via /etc/hostname) ==
-#  * preserve_hostname:
-#      default: False
-#      If this option is set to True, then /etc/hostname will never updated
-#      The default behavior is to update it if it has not been modified by
-#      the user.
-#
-#  * hostname:
-#      this option will be used wherever the 'hostname' is needed
-#      simply substitute it in the description above.
-#      ** If you wish to set your hostname, set it here **
-#      default: 'hostname' as returned by the metadata service
-#               on EC2, the hostname portion of 'local-hostname' is used
-#               which is something like 'ip-10-244-170-199'
-#
-#  * fqdn:
-#      this option will be used wherever 'fqdn' is needed.
-#      simply substitue it in the description above.
-#      default: fqdn as returned by the metadata service.  on EC2 'hostname'
-#               is used, so this is like: ip-10-244-170-199.ec2.internal
-#
-# == /etc/hosts management ==
-#
-preserve_hostname: True
-hostname:{{inventory_hostname}}
+# Note, that the list has to be proper yaml, so you have to quote
+# any characters yaml would eat (':' can be problematic)
+runcmd:
+ - [ /bin/systemctl, enable, ssh ]
+ - [ ufw, disable ]
+ - [ /bin/systemctl, daemon-reload ]

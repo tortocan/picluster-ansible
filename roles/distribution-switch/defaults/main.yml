@@ -1,10 +1,9 @@
 boot_order: "0xf124"
 set_boot_path: false
-distribution_setup_ssh_after_sshpass_initial: true
 distribution_setup_ssh_ping: true
 distribution_setup_ssh_after_sshpass: true
-distribution_ssh_delay_initial:  0
-distribution_ssh_timeout_initial: 3
+distribution_ssh_delay_initial:  1
+distribution_ssh_timeout_initial: 5
 distribution_ssh_delay: 2
 distribution_ssh_timeout: 300
 pi_distribution: "Debian"

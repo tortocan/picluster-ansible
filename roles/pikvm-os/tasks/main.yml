@@ -3,21 +3,21 @@
     mount_root_path: "/media/{{inventory_hostname}}-archlinux-sda2"
     id_rsa_path: "{{lookup('env','HOME')}}/.ssh/id_rsa.pub"
 
-- name: Set id rsa contents 
+- name: Set id rsa contents
   set_fact:
     id_rsa_contents: "{{ lookup('file', id_rsa_path) }}"
 
 - name: Include ssh initial
   vars:
-    ssh_delay: "0" 
+    ssh_delay: "0"
     ssh_timeout: "20"
     ssh_ping: true
     clean: true
   include_role:
     name: ssh
-  when: ansible_distribution is not defined 
-    or ansible_distribution is defined 
-    and ansible_distribution == '' 
+  when: ansible_distribution is not defined
+    or ansible_distribution is defined
+    and ansible_distribution == ''
 
 - name: Creates mount point directories
   become: yes
@@ -63,7 +63,7 @@
   shell: umount -lf {{os_disk}}* && umount -lf {{os_disk}}*; wipefs -a {{os_disk}}
   register: wipe
   failed_when: >
-    wipe.rc != 0 
+    wipe.rc != 0
     and 'not mounted.' not in wipe.stderr
   when: clean
 
@@ -157,26 +157,26 @@
   shell: mount "{{os_disk}}1" "{{mount_boot_path}}"
   register: mount
   when: >
-    "/media" in mount_boot_path 
+    "/media" in mount_boot_path
   failed_when: >
-    mount.rc != 0 
+    mount.rc != 0
     and 'already mounted on' not in mount.stderr
     or 'not mounted.' in mount.stderr
   changed_when: >
-    mount.rc == 0  
-    
+    mount.rc == 0
+
 - name: Mount up os disk root partition
   become: yes
   shell: mount "{{os_disk}}2" "{{mount_root_path}}"
   register: mount2
   when: >
-    "/media" in mount_root_path 
+    "/media" in mount_root_path
   failed_when: >
-    mount2.rc != 0 
+    mount2.rc != 0
     and 'already mounted on' not in mount2.stderr
     or 'not mounted.' in mount2.stderr
   changed_when: >
-    mount2.rc == 0  
+    mount2.rc == 0
 
 - name: Create init script
   become: yes
@@ -195,7 +195,7 @@
     state: present
   vars:
     packages:
-    - arch-install-scripts 
+    - arch-install-scripts
 
 - name: Enter chroot run init.sh
   run_once: true
@@ -326,11 +326,9 @@
     clean: true
     distribution_ssh_delay_initial: 5
     distribution_ssh_timeout_initial: 120
-    distribution_setup_ssh_after_sshpass_initial: true
     distribution_ssh_user_after_reboot: "{{Archlinux_user}}"
     distribution_ssh_delay: 30
     distribution_ssh_timeout: 90
     distribution_setup_ssh_ping: true
-    force_pxe_boot_state: true
   include_role:
     name: distribution-switch

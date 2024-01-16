@@ -1,16 +1,3 @@
-
-# - name: Include distribution switch to RaspiOS
-#   vars:
-#     distribution: "Debian"
-#     distribution_ssh_delay: "{%if  ansible_distribution == ''%}30{%else%}5{%endif%}"
-#     distribution_ssh_timeout: "{%if ansible_distribution == '' %}300{%else%}120{%endif%}"
-#     distribution_ssh_delay_initial: 0
-#     distribution_ssh_timeout_initial: 10
-#     distribution_setup_ssh_ping: true
-#     distribution_setup_ssh_after_sshpass_initial: true
-#   include_role:
-#     name: distribution-switch
-
 - name: Setup rpi-eeprom-update branch
   vars:
     ansible_user: pi

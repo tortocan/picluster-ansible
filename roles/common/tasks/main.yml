@@ -19,22 +19,12 @@
     - apt-transport-https
     - ca-certificates
     - curl
-    # - gnupg-agent
-    # - software-properties-common
-    # - python3-pip
-    # - python3-setuptools
-    # - aptitude
-    # - golang
     - git
     - bash-completion
-    # - nfs-common
-    # - dphys-swapfile
-    - lvm2
-    - xfsprogs
     - btrfs-progs
-    - rsync
-    - lsb-release
-    - arch-install-scripts
     - kpartx
-    - nmap
-    - iperf3
+    - e2fsck
+    - hdparm
+    - smartmontools
+
+

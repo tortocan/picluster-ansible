@@ -24,22 +24,22 @@ ansible-playbook ds.yml -l k8s_workers,k8s_masters
 ## Control Plane
 Desired state: Unplug usb disk drive and shutdown KVM switch
 - ansible-playbook ssh.yml -l control_plane -e clean=true
-- ansible-playbook ds.yml -l control_plane -e force_usb_boot_state=disabled
+- ansible-playbook ds.yml -l control_plane
 - ansible-playbook main.yml -l control_plane -e clean=true
 ## Node
 #### Single node
 - ansible-playbook ssh.yml -l c1-node3 -e clean=true
-- ansible-playbook ds.yml -l c1-node3 -e force_pxe_boot_state=enabled
+- ansible-playbook ds.yml -l c1-node3
 - ansible-playbook main.yml -l c1-node3 -e clean=true -t os
 #### All nodes
 - ansible-playbook ssh.yml -l k8s_workers -e clean=true
-- ansible-playbook ds.yml -l k8s_workers -e force_pxe_boot_state=enabled
+- ansible-playbook ds.yml -l k8s_workers
 - ansible-playbook main.yml -l k8s_workers -e clean=true -t os
 #### Single master
 - ansible-playbook ssh.yml -l c1-master1 -e clean=true
-- ansible-playbook ds.yml -l c1-master1 -e force_pxe_boot_state=enabled
+- ansible-playbook ds.yml -l c1-master1
 - ansible-playbook main.yml -l c1-master1 -e clean=true -t os
 #### All masters
 - ansible-playbook ssh.yml -l k8s_masters -e clean=true
-- ansible-playbook ds.yml -l k8s_masters -e force_pxe_boot_state=enabled
+- ansible-playbook ds.yml -l k8s_masters
 - ansible-playbook main.yml -l k8s_masters -e clean=true -t os

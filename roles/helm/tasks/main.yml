@@ -2,6 +2,9 @@
 - name: Check if Helm binary exists.
   stat:
     path: "{{ helm_bin_path }}"
+    get_checksum: no
+    get_attributes: no
+    get_mime: no
   register: helm_check
 
 - name: Check Helm version.

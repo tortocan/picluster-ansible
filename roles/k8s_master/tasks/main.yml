@@ -7,6 +7,9 @@
 - name: Check if kube confing exists for {{current_user}} user
   stat:
     path: "/home/{{current_user}}/.kube"
+    get_checksum: no
+    get_attributes: no
+    get_mime: no
   register: kube
 
 - debug:

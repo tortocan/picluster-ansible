@@ -95,30 +95,39 @@
     ssh_pass: ""
     cacheable: no
   when: ssh_user is defined
-  
-- debug:
-    var: ansible_user, ssh_user, ansible_become_pass, ssh_pass
-  when: ssh_user is defined
 
 - name: Ping
   ping:
+  ignore_errors: true
+  ignore_unreachable: true
+  register: ping
+  when: >
+    ssh_ping is defined
+    and ssh_ping == true
 
-- name: Setup ssh hosts after sshpass
+- debug:
+    var: ansible_user, ssh_user, ansible_become_pass, ssh_pass, ping
+  when: ssh_user is defined
+
+- name: Setup ssh hosts facts
   connection: ssh
   setup:
     gather_timeout: 3
   ignore_errors: true
   ignore_unreachable: true
   register: host_setup
-  when: ssh_user is defined
+  when: ssh_user is defined and ping.failed is defined and ping.failed == false
 
 - name: Set host facts
   set_fact:
     ansible_ssh_user: "{{ansible_ssh_user | default(host_setup.ansible_facts['ansible_user_id'])}}"
     ansible_user: "{{ansible_user | default(host_setup.ansible_facts['ansible_user_id'])}}"
     ssh_user: "{{ssh_user | default(host_setup.ansible_facts['ansible_user_id'])}}"
+    ansible_distribution: "{{ host_setup.ansible_facts['ansible_distribution'] }}"
+    cacheable: yes
   when: ssh_user is defined
     and host_setup.skipped is not defined
+    and ping.failed is defined and ping.failed == false
 
 - name: Set become pass
   set_fact:
@@ -131,9 +140,10 @@
     user: "{{ssh_user}}"
     state: present
     key: "{{ssh_keys}}"
+  when: ping.failed is defined and ping.failed == false
 
 - debug:
-    var: host_setup.ansible_facts['ansible_distribution'], host_setup.ansible_facts['ansible_user_id']
+    var: host_setup.ansible_facts['ansible_distribution']
 
 - debug:
     var: ansible_distribution, current_known_distribution, ansible_ssh_user, ansible_user, ssh_user, ansible_host,ansible_become_pass
