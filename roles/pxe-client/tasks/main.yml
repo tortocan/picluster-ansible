@@ -119,9 +119,8 @@
     ansible_user: "root"
   find:
     paths: "{{pxe_img_dir}}"
-    patterns: raspios.img
+    patterns: raspios_armhf.img
   register: osimg
-
 
 - name: Download os image
   delegate_to: "{{pxe_server}}"
@@ -130,7 +129,7 @@
     ansible_user: "root"
   run_once: true
   get_url:
-    url: "https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2023-12-11/2023-12-11-raspios-bookworm-arm64-lite.img.xz"
+    url: "https://downloads.raspberrypi.org/raspios_lite_armhf_latest"
     dest: "{{pxe_img_dir}}"
   when: osimg.matched == 0
 
@@ -141,7 +140,7 @@
     ansible_user: "root"
   run_once: true
   become: yes
-  shell: "xz -d /srv/nfs/images/*-raspios-*.img.xz"
+  shell: "xz -d /srv/nfs/images/*-raspios-*-armhf*.img.xz"
   when: osimg.matched == 0
 
 - name: Rename file
@@ -150,7 +149,7 @@
   connection: ssh
   vars:
     ansible_user: "root"
-  shell: "mv {{pxe_img_dir}}/*raspios*.img {{pxe_img_dir}}/raspios.img"
+  shell: "mv {{pxe_img_dir}}/*-raspios-*-armhf*.img {{pxe_img_dir}}/raspios_armhf.img"
   when: osimg.matched == 0
 
 - name: Add partition mappings
@@ -160,7 +159,7 @@
     ansible_user: "root"
   become: yes
   run_once: true
-  shell: kpartx -av {{pxe_img_dir}}/raspios.img
+  shell: kpartx -av {{pxe_img_dir}}/raspios_armhf.img
   register: kpartx_result
 - debug:
     var: kpartx_result.stdout
@@ -225,7 +224,7 @@
 #     replace: "hostname"
 
 #
-  
+
 - name: Create custom img script
   delegate_to: "{{pxe_server}}"
   connection: ssh
@@ -247,7 +246,7 @@
     ansible_user: "root"
   run_once: true
   become: yes
-  shell: chroot "{{mount_root_path}}" /bin/bash -c 'chmod +x ./custom-img.sh;./custom-img.sh && exit'
+  shell: chroot "{{mount_root_path}}" /bin/sh -c 'chmod +x ./custom-img.sh;./custom-img.sh && exit'
   register: chroot
 
 - debug:
@@ -363,8 +362,10 @@
     state: present
   register: _fstab
   with_items:
-  - "{{ansible_facts['all_ipv4_addresses'][0]}}:{{boot_path}} /boot nfs defaults,vers=4.1,proto=tcp 0 0"
-
+  - "{{ansible_facts['all_ipv4_addresses'][0]}}:{{boot_path}} /boot nfs defaults,vers=3 0 0"
+#10.42.0.211:/tftpboot /boot/firmware/ nfs defaults,vers=3 0 0
+#https://www.raspberrypi.com/documentation/computers/remote-access.html#set-up-nfs-root
+#root=/dev/nfs nfsroot=10.42.0.211:/nfs/client1,vers=3 rw ip=dhcp rootwait
 - name: Boot configuration
   delegate_to: "{{pxe_server}}"
   connection: ssh
@@ -378,7 +379,7 @@
     state: present
   register: _cmdline
   with_items:
-  - "console=serial0,115200 console=tty1 root=/dev/nfs nfsroot={{ansible_facts['all_ipv4_addresses'][0]}}:{{root_path}},vers=4.1,proto=tcp rw ip=dhcp rootwait elevator=deadline"
+  - "root=/dev/nfs nfsroot={{ansible_facts['all_ipv4_addresses'][0]}}:{{root_path}},vers=3 rw ip=dhcp rootwait"
 
 - name: Exports configuration
   delegate_to: "{{pxe_server}}"
@@ -418,14 +419,14 @@
 
 - name: Include ssh initial
   vars:
-    ssh_delay: "30" 
+    ssh_delay: "30"
     ssh_timeout: "120"
     ssh_ping: true
     clean: true
   include_role:
     name: ssh
-  when: ansible_distribution is not defined 
-    or ansible_distribution is defined 
+  when: ansible_distribution is not defined
+    or ansible_distribution is defined
     and ansible_distribution == ''
 
 # - name: Install pks dep

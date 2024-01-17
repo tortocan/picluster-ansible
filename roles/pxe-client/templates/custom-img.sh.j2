@@ -1,8 +1,3 @@
 rm -fdr /etc/init.d/resize2fs_once
-#apt purge dphys-swapfile -y
-apt clean -y
-apt update -y
-apt install arch-install-scripts kpartx nmap iperf3 -y
-apt autoremove -y
 su - {{Debian_user}} -c 'mkdir -p /home/{{Debian_user}}/.ssh && chmod u=xrw /home/{{Debian_user}}/.ssh && touch /home/{{Debian_user}}/.ssh/authorized_keys && chmod u=rw /home/{{Debian_user}}/.ssh/authorized_keys && echo "{{id_rsa_contents}}" > /home/{{Debian_user}}/.ssh/authorized_keys && ls -la /home/{{Debian_user}}'
 exit 0
