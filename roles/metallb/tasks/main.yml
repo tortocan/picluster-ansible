@@ -18,9 +18,9 @@
   changed_when: "'deleted' in clean.stdout"
   failed_when: "'error' in clean.stderr "
   with_items:
-    - kubectl get crds -n metallb-system | xargs -r kubectl delete crds
-    - kubectl get clusterrolebindings -l app=metallb -o=jsonpath='{.items[*].metadata.name}' | xargs -r kubectl delete clusterrolebindings
-    - kubectl get clusterrole -l app=metallb -o=jsonpath='{.items[*].metadata.name}' | xargs -r kubectl delete clusterrole
+    - kubectl get crds -n metallb-system | xargs -r kubectl-n metallb-system  delete crds
+    - kubectl get clusterrolebindings -l app=metallb -o=jsonpath='{.items[*].metadata.name}' | xargs -r kubectl -n metallb-system delete clusterrolebindings
+    - kubectl get clusterrole -l app=metallb -o=jsonpath='{.items[*].metadata.name}' | xargs -r kubectl -n metallb-system  delete clusterrole
     - kubectl get validatingwebhookconfigurations -n metallb-system  -o=jsonpath='{.items[*].metadata.name}' | xargs -r kubectl -n metallb-system delete validatingwebhookconfigurations
     - kubectl -n metallb-system get configmaps -o=jsonpath='{.items[*].metadata.name}' | xargs -r kubectl -n metallb-system delete configmaps
     - kubectl -n metallb-system delete all --all
