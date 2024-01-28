@@ -245,3 +245,4 @@ runcmd:
  - [ /bin/systemctl, enable, ssh ]
  - [ ufw, disable ]
  - [ /bin/systemctl, daemon-reload ]
+ - [ awk -F: '/Serial/{print $2}' /proc/cpuinfo | md5sum | tr -d '-' | tr -d '[:space:]' | sudo tee /etc/machine-id ]
