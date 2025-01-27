@@ -12,23 +12,23 @@ all:
       node_mac: dc:a6:32:d5:cf:d0
       node_serial: "13693741"
       os_disk: /dev/sda
-    c1-node1:
+    c1-master4:
       node_mac: dc:a6:32:f1:02:c2
       node_serial: "68f00c1c"
       os_disk: /dev/sda
       disk: /dev/sdb
-    c1-node2:
+    c1-master5:
       node_mac: dc:a6:32:32:46:31
       node_serial: 057754e6
       os_disk: /dev/sda
       disk: /dev/sdb
-    c1-node3:
-      node_mac: dc:a6:32:32:2e:ce
-      node_serial: c365f9ab
-      os_disk: /dev/sda
-      disk: /dev/sdb
-    router:
-      ansible_host: 172.16.0.1
+    # c1-master6:
+    #   node_mac: dc:a6:32:32:2e:ce
+    #   node_serial: c365f9ab
+    #   os_disk: /dev/sda
+    #   disk: /dev/sdb
+    # router:
+    #   ansible_host: 172.16.0.1
     pikvm:
       node_mac: dc:a6:32:32:45:e1
       node_serial: b582d82e
@@ -46,9 +46,9 @@ all:
         c1-master3:
     k8s_workers:
       hosts:
-        c1-node1:
-        c1-node3:
-        c1-node2: 
+        c1-master4:
+        c1-master5:
+        # c1-master6: 
   vars:
     clean_root: false
     clean_boot: false

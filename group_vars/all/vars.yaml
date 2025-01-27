@@ -42,8 +42,8 @@ alarm_password: !vault |
           3735
 load_balancer_server_ip_tcp: 172.16.1.245
 load_balancer_server_ip_udp: 172.16.1.245
-Debian_user: pi
+Debian_user: gt
 Ubuntu_user: ubuntu
 Archlinux_user: alarm
 ansible_password: 'Use ssh keys'
-ssh_keys: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCjZSvaQ0cjTbLH/rY4jUzbiE3e2dOQJtFj3oy6zOEfQuzUp8bSyXFTZ7BCVf+N4dRo09p+6yYF3b2JTeFYWU0L94vmugCax0XUBiicJhb9XcienQAHQOY/wJLvQSINGzmMmsPTm1ANZsr4DnyISXybc5ufZ2XIRvmTfbOPNmUkBFgZZukOa/9qoGopGZaIPi5ZGb/W0lQZJz6kXcid2TUXclcrBwA/RYm6uziCAnXkg/OdoPrjJFTp3LinVHzHv3mSyaAjl57IKoIu8hKpHxaepUGQsnmSnPrxZIldSScUTrmN9Pe+dnY+RRHYwyO34d1khMZEmXdIsc6Lo7JVTZ2l eventim\gtortocan@LPT170'
+ssh_keys: ''
