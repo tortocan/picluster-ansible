@@ -119,7 +119,7 @@
     ansible_user: "root"
   find:
     paths: "{{pxe_img_dir}}"
-    patterns: raspios_armhf.img
+    patterns: raspios_arm64.img
   register: osimg
 
 - name: Download os image
@@ -129,7 +129,7 @@
     ansible_user: "root"
   run_once: true
   get_url:
-    url: "https://downloads.raspberrypi.org/raspios_lite_armhf_latest"
+    url: "https://downloads.raspberrypi.org/raspios_lite_arm64_latest"
     dest: "{{pxe_img_dir}}"
   when: osimg.matched == 0
 
@@ -140,7 +140,7 @@
     ansible_user: "root"
   run_once: true
   become: yes
-  shell: "xz -d /srv/nfs/images/*-raspios-*-armhf*.img.xz"
+  shell: "xz -d /srv/nfs/images/*-raspios-*-arm64*.img.xz"
   when: osimg.matched == 0
 
 - name: Rename file
@@ -149,7 +149,7 @@
   connection: ssh
   vars:
     ansible_user: "root"
-  shell: "mv {{pxe_img_dir}}/*-raspios-*-armhf*.img {{pxe_img_dir}}/raspios_armhf.img"
+  shell: "mv {{pxe_img_dir}}/*-raspios-*-arm64*.img {{pxe_img_dir}}/raspios_arm64.img"
   when: osimg.matched == 0
 
 - name: Add partition mappings
@@ -159,7 +159,7 @@
     ansible_user: "root"
   become: yes
   run_once: true
-  shell: kpartx -av {{pxe_img_dir}}/raspios_armhf.img
+  shell: kpartx -av {{pxe_img_dir}}/raspios_arm64.img
   register: kpartx_result
 - debug:
     var: kpartx_result.stdout

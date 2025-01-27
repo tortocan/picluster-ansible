@@ -40,6 +40,8 @@
       tags: control-plane, pikvm-os, os
     - role: pxe-server
       tags: control-plane, pxe-server, os
+    - role: yay
+      tags: control-plane, yay, os
 
 - hosts: 
     - k8s_masters

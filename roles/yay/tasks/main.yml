@@ -39,7 +39,7 @@
     chdir: yay/
 
 - name: Install yay package
-  become: yes
+  become: false
   shell: yay -V || pacman -U yay*.pkg.tar.zst --noconfirm
   args:
     chdir: yay/
